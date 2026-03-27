@@ -8,6 +8,8 @@ const jobRoutes = require('./routes/jobRoutes');
 const statsRoutes = require('./routes/statsRoutes');
 const searchRoutes = require('./routes/searchRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const communityRoutes = require('./routes/communityRoutes');
+const workerHomeRoutes = require('./routes/workerHomePage');
 
 // Load env variables
 dotenv.config();
@@ -35,6 +37,8 @@ app.use('/api/legal', require('./routes/legalRoutes'));
 app.use('/api/stats', statsRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/community', communityRoutes);
+app.use('/api/worker', workerHomeRoutes);
 
 // Root route
 app.get('/', (req, res) => {
