@@ -1,4 +1,6 @@
 const User = require('../models/User');
+const PlatformSettings = require('../models/PlatformSettings');
+const { validateRequiredDocuments } = require('../utils/platformSettingsUtils');
 const { sendTokenResponse, generateToken } = require('../utils/tokenUtils');
 const { generateOTP, getOTPExpiry } = require('../utils/otpUtils');
 const { validationResult } = require('express-validator');
@@ -46,6 +48,9 @@ exports.register = async (req, res) => {
     const panCardImage = req.files && req.files ['panCardImage']
      ? req.files['panCardImage'][0].path
      : null;
+    const medicalCertificate = req.files && req.files['medicalCertificate']
+     ? req.files['medicalCertificate'][0].path
+     : null;
 
     // Check if user already exists
     const userExists = await User.findOne({ phone });
@@ -60,6 +65,19 @@ exports.register = async (req, res) => {
     // Validate userType
     const validUserTypes = ['customer', 'vendor', 'worker'];
     const finalUserType = userType && validUserTypes.includes(userType) ? userType : 'customer';
+
+    // Validate required documents based on platform settings
+    if (finalUserType === 'worker' || finalUserType === 'vendor') {
+      const documentValidation = await validateRequiredDocuments(finalUserType, req.files, req.body);
+      
+      if (!documentValidation.success) {
+        return res.status(400).json({
+          success: false,
+          message: `${documentValidation.message} as per current platform settings`,
+          errors: documentValidation.errors
+        });
+      }
+    }
 
     // Generate OTP
     const otp = generateOTP();
@@ -77,6 +95,7 @@ exports.register = async (req, res) => {
       aadhaarFrontImage,
       aadhaarBackImage,
       panCardImage,
+      medicalCertificate,
       otp,
       otpExpire,
       otpAttempts: 0,

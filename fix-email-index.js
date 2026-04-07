@@ -30,7 +30,7 @@ const fixEmailIndex = async () => {
         throw error;
       }
     }
-
+    
     // Create new sparse unique index on email
     console.log('\n🔧 Creating new sparse unique index on email...');
     await collection.createIndex(

@@ -1,3 +1,4 @@
+const PlatformSettings = require('../models/PlatformSettings');
 const User = require('../models/User');
 const fs = require('fs');
 
@@ -36,8 +37,36 @@ exports.createCustomerProfile = async (req, res) => {
 exports.createWorkerProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
+
+
     if (!user || user.userType !== 'worker') {
       return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    const mandatoryDocuments = await PlatformSettings.getOrCreateSettings().then(settings => settings.verificationRules.worker);
+
+    const fieldMap = {
+      idProof: () => req.files?.aadhaarFrontImage?.[0] && req.files?.aadhaarBackImage?.[0],
+      age: () => req.body?.age && parseInt(req.body.age) > 0,
+      medicalCertificate: () => req.files?.medicalCertificate?.[0]
+    };
+
+    const rule = Object.entries(mandatoryDocuments);
+
+    for (const [key, value] of rule) {
+      if (value) {
+        const validator = fieldMap[key];
+        if (!validator) {
+          console.warn(`No validator found for mandatory field: ${key}`);
+          continue;
+        }
+        if (!validator()) {
+          return res.status(400).json({
+            success: false,
+            message: `Missing or invalid mandatory document: ${key}`
+          });
+        }
+      }
     }
 
     const { name, email, city, dailyRate, aadhaarNumber, experience, skills, role } = req.body;
@@ -57,6 +86,7 @@ exports.createWorkerProfile = async (req, res) => {
       if (req.files.profileImage) user.profileImage = req.files.profileImage[0].path;
       if (req.files.aadhaarFrontImage) user.aadhaarFrontImage = req.files.aadhaarFrontImage[0].path;
       if (req.files.aadhaarBackImage) user.aadhaarBackImage = req.files.aadhaarBackImage[0].path;
+      if (req.files.medicalCertificate) user.medicalCertificate = req.files.medicalCertificate[0].path;
       if (req.files.certificateImages) {
         user.certificates = req.files.certificateImages.map(file => file.path);
       }
@@ -80,6 +110,25 @@ exports.createVendorProfile = async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user || user.userType !== 'vendor') {
       return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    const mandatoryDocuments = await PlatformSettings.getOrCreateSettings().then(settings => settings.verificationRules.vendor);
+
+    const fieldMap = {
+      gstNumber: () => req.body?.gstNumber,
+      licenseNumber: () => req.body?.licenseNumber,
+      ownerName: () => req.files?.ownerName
+    };
+
+    const rule = Object.entries(mandatoryDocuments);
+
+    for (const [key, value] of rule) {
+      if (value && !fieldMap[key]()) {
+        return res.status(400).json({
+          success: false,
+          message: `Missing mandatory document: ${key}`
+        });
+      }
     }
 
     const { name, email, city, ownerName, companyName, panNumber, gstNumber, licenseNumber, projectTypes, role } = req.body;
@@ -130,7 +179,7 @@ exports.editCustomerProfile = async (req, res) => {
     if (city) updateData.city = city;
 
     if (req.files?.profileImage) {
-      if (user.profileImage) fs.unlink(user.profileImage, () => {});
+      if (user.profileImage) fs.unlink(user.profileImage, () => { });
       updateData.profileImage = req.files.profileImage[0].path;
     }
 
@@ -155,6 +204,26 @@ exports.editWorkerProfile = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
+
+    const mandatoryDocuments = await PlatformSettings.getOrCreateSettings().then(settings => settings.verificationRules.worker);
+
+    const fieldMap = {
+      idProof: () => req.files?.aadhaarFrontImage && req.files?.aadhaarBackImage,
+      age: () => req.body?.age,
+      medicalCertificate: () => req.files?.medicalCertificate
+    };
+
+    const rule = Object.entries(mandatoryDocuments);
+
+    for (const [key, value] of rule) {
+      if (value && !fieldMap[key]()) {
+        return res.status(400).json({
+          success: false,
+          message: `Missing mandatory document: ${key}`
+        });
+      }
+    }
+
     const { name, email, city, dailyRate, aadhaarNumber, experience, skills } = req.body;
     const updateData = {};
     let documentsUpdated = false;
@@ -172,17 +241,22 @@ exports.editWorkerProfile = async (req, res) => {
 
     if (req.files) {
       if (req.files.profileImage) {
-        if (user.profileImage) fs.unlink(user.profileImage, () => {});
+        if (user.profileImage) fs.unlink(user.profileImage, () => { });
         updateData.profileImage = req.files.profileImage[0].path;
       }
       if (req.files.aadhaarFrontImage) {
-        if (user.aadhaarFrontImage) fs.unlink(user.aadhaarFrontImage, () => {});
+        if (user.aadhaarFrontImage) fs.unlink(user.aadhaarFrontImage, () => { });
         updateData.aadhaarFrontImage = req.files.aadhaarFrontImage[0].path;
         documentsUpdated = true;
       }
       if (req.files.aadhaarBackImage) {
-        if (user.aadhaarBackImage) fs.unlink(user.aadhaarBackImage, () => {});
+        if (user.aadhaarBackImage) fs.unlink(user.aadhaarBackImage, () => { });
         updateData.aadhaarBackImage = req.files.aadhaarBackImage[0].path;
+        documentsUpdated = true;
+      }
+      if (req.files.medicalCertificate) {
+        if (user.medicalCertificate) fs.unlink(user.medicalCertificate, () => { });
+        updateData.medicalCertificate = req.files.medicalCertificate[0].path;
         documentsUpdated = true;
       }
       if (req.files.certificateImages) {
@@ -221,6 +295,25 @@ exports.editVendorProfile = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
+    const mandatoryDocuments = await PlatformSettings.getOrCreateSettings().then(settings => settings.verificationRules.vendor);
+
+    const fieldMap = {
+      gstNumber: () => req.body?.gstNumber,
+      licenseNumber: () => req.body?.licenseNumber,
+      ownerName: () => req.files?.ownerName
+    };
+
+    const rule = Object.entries(mandatoryDocuments);
+
+    for (const [key, value] of rule) {
+      if (value && !fieldMap[key]()) {
+        return res.status(400).json({
+          success: false,
+          message: `Missing mandatory document: ${key}`
+        });
+      }
+    }
+
     const { name, email, city, ownerName, companyName, panNumber, gstNumber, licenseNumber, projectTypes } = req.body;
     const updateData = {};
     if (name) updateData.name = name;
@@ -235,15 +328,15 @@ exports.editVendorProfile = async (req, res) => {
 
     if (req.files) {
       if (req.files.profileImage) {
-        if (user.profileImage) fs.unlink(user.profileImage, () => {});
+        if (user.profileImage) fs.unlink(user.profileImage, () => { });
         updateData.profileImage = req.files.profileImage[0].path;
       }
       if (req.files.companyLogo) {
-        if (user.companyLogo) fs.unlink(user.companyLogo, () => {});
+        if (user.companyLogo) fs.unlink(user.companyLogo, () => { });
         updateData.companyLogo = req.files.companyLogo[0].path;
       }
       if (req.files.panCardImage) {
-        if (user.panCardImage) fs.unlink(user.panCardImage, () => {});
+        if (user.panCardImage) fs.unlink(user.panCardImage, () => { });
         updateData.panCardImage = req.files.panCardImage[0].path;
       }
     }
@@ -282,6 +375,7 @@ exports.getProfile = async (req, res) => {
         profileImage: user.profileImage,
         aadhaarFrontImage: user.aadhaarFrontImage,
         aadhaarBackImage: user.aadhaarBackImage,
+        medicalCertificate: user.medicalCertificate,
         panCardImage: user.panCardImage,
         city: user.city,
         dailyRate: user.dailyRate,
@@ -352,7 +446,7 @@ exports.editAdminProfile = async (req, res) => {
     if (email) updateData.email = email;
 
     if (req.files?.profileImage) {
-      if (user.profileImage) fs.unlink(user.profileImage, () => {});
+      if (user.profileImage) fs.unlink(user.profileImage, () => { });
       updateData.profileImage = req.files.profileImage[0].path;
     }
 

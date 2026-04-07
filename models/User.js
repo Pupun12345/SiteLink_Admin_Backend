@@ -58,6 +58,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
+  medicalCertificate: {
+    type: String,
+    default: null,
+  },
   //vendor-specific field
   panCardImage: {
     type: String,

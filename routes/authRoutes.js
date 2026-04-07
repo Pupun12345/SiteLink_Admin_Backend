@@ -193,7 +193,8 @@ router.post('/register',
     { name: 'companyLogo', maxCount: 1 },
     { name: 'aadhaarFrontImage', maxCount: 1 },
     { name: 'aadhaarBackImage', maxCount: 1 },
-    { name: 'panCardImage', maxCount:1}
+    { name: 'panCardImage', maxCount: 1 },
+    { name: 'medicalCertificate', maxCount: 1 }
   ]), 
   registerValidation, 
   register

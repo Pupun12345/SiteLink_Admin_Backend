@@ -4,6 +4,7 @@ const {
   getWorkerDetails,
   verifyWorker,
   rejectWorker,
+  rateWorker,
   getPendingVendors,
   getVendors,
   getVendorDetails,
@@ -24,12 +25,16 @@ router.use(adminOnly);
 // Admin-only user management
 router.get('/users', getAllUsers);
 router.get('/users/:id', getUserDetails);
+router.put('/users/:id/verify', verifyWorker);
+router.put('/users/:id/reject', rejectWorker);
+router.put('/users/:id/rate', rateWorker);
 
 // Admin-only worker verification endpoints
 router.get('/workers/pending', getPendingWorkers);
 router.get('/workers/:id', getWorkerDetails);
 router.put('/workers/:id/verify', verifyWorker);
 router.put('/workers/:id/reject', rejectWorker);
+router.put('/workers/:id/rate', rateWorker);
 
 // Admin-only vendor verification endpoints
 router.get('/vendors/pending', getPendingVendors);

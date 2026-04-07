@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const PlatformSettings = require('../models/PlatformSettings');
 
 // Get list of workers pending document verification
 exports.getPendingWorkers = async (req, res) => {
@@ -30,14 +31,24 @@ exports.getWorkerDetails = async (req, res) => {
     }
 
     const worker = await User.findById(id).select(
-      'name age phone experience city dailyRate profileImage aadhaarFrontImage aadhaarBackImage certificates verificationStatus isVerified skills userType'
+      'name age phone experience city dailyRate profileImage aadhaarFrontImage aadhaarBackImage medicalCertificate certificates verificationStatus isVerified skills userType adminRating adminRatingComment ratedAt'
     );
 
     if (!worker || worker.userType !== 'worker') {
       return res.status(404).json({ success: false, message: 'Worker not found' });
     }
 
-    return res.json({ success: true, data: worker });
+    // Get platform settings to show required documents
+    const platformSettings = await PlatformSettings.getOrCreateSettings();
+    const requiredDocuments = platformSettings.verificationRules.worker;
+
+    return res.json({ 
+      success: true, 
+      data: {
+        ...worker.toObject(),
+        requiredDocuments
+      }
+    });
   } catch (error) {
     console.error('getWorkerDetails error:', error);
     return res.status(500).json({ success: false, message: 'Server error' });
@@ -51,29 +62,29 @@ exports.verifyWorker = async (req, res) => {
 
     // Validate ObjectId format
     if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
-      return res.status(400).json({ success: false, message: 'Invalid worker ID format' });
+      return res.status(400).json({ success: false, message: 'Invalid user ID format' });
     }
 
-    const worker = await User.findById(id);
+    const user = await User.findById(id);
 
-    if (!worker || worker.userType !== 'worker') {
-      return res.status(404).json({ success: false, message: 'Worker not found' });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    worker.verificationStatus = 'verified';
-    worker.isVerified = true;
-    worker.verificationRejectedReason = null;
-    worker.verificationReviewedAt = new Date();
+    user.verificationStatus = 'verified';
+    user.isVerified = true;
+    user.verificationRejectedReason = null;
+    user.verificationReviewedAt = new Date();
 
-    await worker.save({ validateModifiedOnly: true });
+    await user.save({ validateModifiedOnly: true });
 
     return res.json({
       success: true,
-      message: 'Worker verified successfully',
+      message: `${user.userType.charAt(0).toUpperCase() + user.userType.slice(1)} verified successfully`,
       data: {
-        id: worker._id,
-        verificationStatus: worker.verificationStatus,
-        isVerified: worker.isVerified,
+        id: user._id,
+        verificationStatus: user.verificationStatus,
+        isVerified: user.isVerified,
       },
     });
   } catch (error) {
@@ -90,37 +101,88 @@ exports.rejectWorker = async (req, res) => {
 
     // Validate ObjectId format
     if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
-      return res.status(400).json({ success: false, message: 'Invalid worker ID format' });
+      return res.status(400).json({ success: false, message: 'Invalid user ID format' });
     }
 
     if (!reason || typeof reason !== 'string' || !reason.trim()) {
       return res.status(400).json({ success: false, message: 'Rejection reason is required' });
     }
 
-    const worker = await User.findById(id);
+    const user = await User.findById(id);
 
-    if (!worker || worker.userType !== 'worker') {
-      return res.status(404).json({ success: false, message: 'Worker not found' });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    worker.verificationStatus = 'rejected';
-    worker.isVerified = false;
-    worker.verificationRejectedReason = reason.trim();
-    worker.verificationReviewedAt = new Date();
+    user.verificationStatus = 'rejected';
+    user.isVerified = false;
+    user.verificationRejectedReason = reason.trim();
+    user.verificationReviewedAt = new Date();
 
-    await worker.save({ validateModifiedOnly: true });
+    await user.save({ validateModifiedOnly: true });
 
     return res.json({
       success: true,
-      message: 'Worker verification rejected',
+      message: `${user.userType.charAt(0).toUpperCase() + user.userType.slice(1)} verification rejected`,
       data: {
-        id: worker._id,
-        verificationStatus: worker.verificationStatus,
-        rejectionReason: worker.verificationRejectedReason,
+        id: user._id,
+        verificationStatus: user.verificationStatus,
+        rejectionReason: user.verificationRejectedReason,
       },
     });
   } catch (error) {
     console.error('rejectWorker error:', error);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// Rate worker (admin only)
+exports.rateWorker = async (req, res) => {
+  try {
+    const { id } = req.params;
+    let { rating, comment } = req.body;
+
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ success: false, message: 'Invalid user ID format' });
+    }
+
+    rating = parseFloat(rating);
+
+    if (!rating || isNaN(rating) || rating < 0.1 || rating > 5.0) {
+      return res.status(400).json({ success: false, message: 'Rating must be between 0.1 and 5.0' });
+    }
+
+    // Round to 1 decimal place
+    rating = Math.round(rating * 10) / 10;
+
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (user.verificationStatus !== 'verified') {
+      return res.status(400).json({ success: false, message: 'Only verified users can be rated' });
+    }
+
+    user.adminRating = rating;
+    user.adminRatingComment = comment || null;
+    user.ratedAt = new Date();
+
+    await user.save({ validateModifiedOnly: true });
+
+    return res.json({
+      success: true,
+      message: `${user.userType.charAt(0).toUpperCase() + user.userType.slice(1)} rated successfully`,
+      data: {
+        id: user._id,
+        adminRating: user.adminRating,
+        adminRatingComment: user.adminRatingComment,
+        ratedAt: user.ratedAt,
+      },
+    });
+  } catch (error) {
+    console.error('rateWorker error:', error);
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 };
@@ -187,7 +249,17 @@ exports.getVendorDetails = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Vendor not found' });
     }
 
-    return res.json({ success: true, data: vendor });
+    // Get platform settings to show required documents
+    const platformSettings = await PlatformSettings.getOrCreateSettings();
+    const requiredDocuments = platformSettings.verificationRules.vendor;
+
+    return res.json({ 
+      success: true, 
+      data: {
+        ...vendor.toObject(),
+        requiredDocuments
+      }
+    });
   } catch (error) {
     console.error('getVendorDetails error:', error);
     return res.status(500).json({ success: false, message: 'Server error' });
@@ -342,7 +414,7 @@ exports.getAllUsers = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const users = await User.find(query)
-      .select('name email phone userType verificationStatus isVerified createdAt profileImage companyName ownerName city role experience')
+      .select('name email phone userType verificationStatus isVerified createdAt profileImage companyName ownerName city role experience adminRating')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -362,7 +434,8 @@ exports.getAllUsers = async (req, res) => {
       phone: user.phone,
       city: user.city,
       role: user.role || (user.userType === 'vendor' ? 'Vendor' : 'Worker'),
-      experience: user.experience
+      experience: user.experience,
+      adminRating: user.adminRating || null,
     }));
 
     return res.json({
@@ -390,7 +463,7 @@ exports.getUserDetails = async (req, res) => {
     }
 
     const user = await User.findById(id).select(
-      'name email phone userType verificationStatus isVerified createdAt profileImage companyName ownerName city role experience age dailyRate aadhaarFrontImage aadhaarBackImage certificates skills gstNumber panNumber licenseNumber panCardImage companyLogo projectTypes adminRating adminRatingComment ratedAt'
+      'name email phone userType verificationStatus isVerified createdAt profileImage companyName ownerName city role experience age dailyRate aadhaarFrontImage aadhaarBackImage medicalCertificate certificates skills gstNumber panNumber licenseNumber panCardImage companyLogo projectTypes adminRating adminRatingComment ratedAt'
     );
 
     if (!user) {
@@ -406,6 +479,7 @@ exports.getUserDetails = async (req, res) => {
       type: user.userType.charAt(0).toUpperCase() + user.userType.slice(1),
       status: user.verificationStatus.charAt(0).toUpperCase() + user.verificationStatus.slice(1),
       join: user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
+      createdAt: user.createdAt,
       plan: 'Basic',
       lastActive: 'Recently',
       avatar: user.profileImage || (user.userType === 'vendor' ? user.companyLogo : 'https://randomuser.me/api/portraits/lego/1.jpg'),
@@ -419,11 +493,15 @@ exports.getUserDetails = async (req, res) => {
       department: user.userType === 'vendor' ? 'Vendor' : 'Worker',
       location: user.city ? `${user.city}, India` : 'Unknown',
       employeeId: `SL-${user._id.toString().slice(-4)}`,
+      adminRating: user.adminRating || null,
+      adminRatingComment: user.adminRatingComment || null,
+      ratedAt: user.ratedAt || null,
       ...(user.userType === 'worker' && {
         age: user.age,
         dailyRate: user.dailyRate,
         aadhaarFrontImage: user.aadhaarFrontImage,
         aadhaarBackImage: user.aadhaarBackImage,
+        medicalCertificate: user.medicalCertificate,
         certificates: user.certificates,
         skills: user.skills
       }),
@@ -435,9 +513,6 @@ exports.getUserDetails = async (req, res) => {
         panCardImage: user.panCardImage,
         companyLogo: user.companyLogo,
         projectTypes: user.projectTypes,
-        adminRating: user.adminRating,
-        adminRatingComment: user.adminRatingComment,
-        ratedAt: user.ratedAt
       })
     };
 
