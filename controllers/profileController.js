@@ -1,6 +1,121 @@
 const PlatformSettings = require('../models/PlatformSettings');
 const User = require('../models/User');
+const AdminUser = require('../models/AdminUser');
+const bcrypt = require('bcryptjs');
 const fs = require('fs');
+
+// Get Profile - Updated to support both User and AdminUser
+exports.getProfile = async (req, res) => {
+  try {
+    let user = null;
+    
+    // Try to find as AdminUser first
+    user = await AdminUser.findById(req.user.id);
+    
+    // If not found, try as regular User
+    if (!user) {
+      user = await User.findById(req.user.id);
+    }
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Return appropriate response based on user type
+    if (user.userType === 'admin' || user.role === 'admin' || user.role === 'super_admin') {
+      // AdminUser response
+      return res.json({
+        success: true,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          permissions: user.permissions,
+          createdAt: user.createdAt,
+          lastLogin: user.lastLogin,
+          isActive: user.isActive
+        }
+      });
+    }
+
+    // Regular User response
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        name: user.name,
+        phone: user.phone,
+        email: user.email,
+        userType: user.userType,
+        role: user.role,
+        profileImage: user.profileImage,
+        aadhaarFrontImage: user.aadhaarFrontImage,
+        aadhaarBackImage: user.aadhaarBackImage,
+        medicalCertificate: user.medicalCertificate,
+        panCardImage: user.panCardImage,
+        city: user.city,
+        dailyRate: user.dailyRate,
+        aadhaarNumber: user.aadhaarNumber,
+        experience: user.experience,
+        skills: user.skills,
+        companyLogo: user.companyLogo,
+        ownerName: user.ownerName,
+        companyName: user.companyName,
+        panNumber: user.panNumber,
+        gstNumber: user.gstNumber,
+        licenseNumber: user.licenseNumber,
+        projectTypes: user.projectTypes,
+        certificates: user.certificates,
+        isVerified: user.isVerified,
+        verificationStatus: user.verificationStatus,
+        verificationRejectedReason: user.verificationRejectedReason,
+        verificationReviewedAt: user.verificationReviewedAt,
+        createdAt: user.createdAt
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Change Password - Updated to support both User and AdminUser
+exports.changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Please provide current and new password' });
+    }
+
+    let user = null;
+    
+    // Try to find as AdminUser first
+    user = await AdminUser.findById(req.user.id).select('+password');
+    
+    // If not found, try as regular User
+    if (!user) {
+      user = await User.findById(req.user.id).select('+password');
+    }
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({ success: false, message: 'Current password is incorrect' });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    res.json({ success: true, message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 // Create Profile - Customer
 exports.createCustomerProfile = async (req, res) => {
@@ -37,7 +152,6 @@ exports.createCustomerProfile = async (req, res) => {
 exports.createWorkerProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-
 
     if (!user || user.userType !== 'worker') {
       return res.status(403).json({ success: false, message: 'Access denied' });
@@ -204,7 +318,6 @@ exports.editWorkerProfile = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
-
     const mandatoryDocuments = await PlatformSettings.getOrCreateSettings().then(settings => settings.verificationRules.worker);
 
     const fieldMap = {
@@ -260,7 +373,6 @@ exports.editWorkerProfile = async (req, res) => {
         documentsUpdated = true;
       }
       if (req.files.certificateImages) {
-        // Replace certificate list with newly uploaded certificates
         updateData.certificates = req.files.certificateImages.map(file => file.path);
         documentsUpdated = true;
       }
@@ -268,7 +380,6 @@ exports.editWorkerProfile = async (req, res) => {
 
     Object.assign(user, updateData);
 
-    // If worker re-uploads documents, reset admin verification state
     if (documentsUpdated) {
       user.verificationStatus = 'pending';
       user.verificationRejectedReason = null;
@@ -348,54 +459,6 @@ exports.editVendorProfile = async (req, res) => {
       success: true,
       message: 'Vendor profile updated successfully',
       user: { id: user._id, name: user.name, phone: user.phone, email: user.email, userType: user.userType, profileImage: user.profileImage, city: user.city, ownerName: user.ownerName, companyName: user.companyName, panNumber: user.panNumber, gstNumber: user.gstNumber, licenseNumber: user.licenseNumber, projectTypes: user.projectTypes, companyLogo: user.companyLogo }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// Get Profile
-exports.getProfile = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    res.json({
-      success: true,
-      user: {
-        id: user._id,
-        name: user.name,
-        phone: user.phone,
-        email: user.email,
-        userType: user.userType,
-        role: user.role,
-        profileImage: user.profileImage,
-        aadhaarFrontImage: user.aadhaarFrontImage,
-        aadhaarBackImage: user.aadhaarBackImage,
-        medicalCertificate: user.medicalCertificate,
-        panCardImage: user.panCardImage,
-        city: user.city,
-        dailyRate: user.dailyRate,
-        aadhaarNumber: user.aadhaarNumber,
-        experience: user.experience,
-        skills: user.skills,
-        companyLogo: user.companyLogo,
-        ownerName: user.ownerName,
-        companyName: user.companyName,
-        panNumber: user.panNumber,
-        gstNumber: user.gstNumber,
-        licenseNumber: user.licenseNumber,
-        projectTypes: user.projectTypes,
-        certificates: user.certificates,
-        isVerified: user.isVerified,
-        verificationStatus: user.verificationStatus,
-        verificationRejectedReason: user.verificationRejectedReason,
-        verificationReviewedAt: user.verificationReviewedAt,
-        createdAt: user.createdAt
-      }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

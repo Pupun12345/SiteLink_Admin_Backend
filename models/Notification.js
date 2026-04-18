@@ -113,7 +113,7 @@ notificationSchema.virtual('formattedDate').get(function() {
   });
 });
 
-// Static method to create system notification
+
 notificationSchema.statics.createSystemNotification = async function(data) {
   const notification = new this({
     ...data,
@@ -123,7 +123,7 @@ notificationSchema.statics.createSystemNotification = async function(data) {
   return await notification.save();
 };
 
-// Static method to create user notification
+
 notificationSchema.statics.createUserNotification = async function(userId, data) {
   const notification = new this({
     ...data,
@@ -133,7 +133,7 @@ notificationSchema.statics.createUserNotification = async function(userId, data)
   return await notification.save();
 };
 
-// Method to mark as read
+// Mark as read
 notificationSchema.methods.markAsRead = async function(userId = null) {
   if (userId && this.recipients.length > 0) {
     const recipient = this.recipients.find(r => r.userId.toString() === userId.toString());
@@ -147,7 +147,7 @@ notificationSchema.methods.markAsRead = async function(userId = null) {
   return await this.save();
 };
 
-// Method to archive notification
+// Archive notification
 notificationSchema.methods.archive = async function(userId = null) {
   if (userId && this.recipients.length > 0) {
     const recipient = this.recipients.find(r => r.userId.toString() === userId.toString());

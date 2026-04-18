@@ -1,11 +1,12 @@
 const express = require('express');
 const {
   editPlanAmount,
-  // notificationSettings,
+  notificationSettings,
   verificationRulesSettings,
+  languageSettings,
   getSettings,
 } = require('../controllers/platformSettingController');
-const { protect } = require('../middleware/auth');
+const { protect, checkPermission } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -23,11 +24,13 @@ const adminOnly = (req, res, next) => {
 
 router.use(protect);
 router.use(adminOnly);
+router.use(checkPermission('canAccessPlatformSettings'));
 
 // Platform settings routes
 router.get('/', getSettings);
 router.put('/plans', editPlanAmount);
-// router.put('/notifications', notificationSettings);
+router.put('/notifications', notificationSettings);
 router.put('/verification-rules', verificationRulesSettings);
+router.put('/language', languageSettings);
 
 module.exports = router;

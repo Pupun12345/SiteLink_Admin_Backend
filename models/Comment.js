@@ -61,12 +61,10 @@ const commentSchema = new mongoose.Schema(
   }
 );
 
-// Index for better query performance
 commentSchema.index({ jobId: 1, createdAt: -1 });
 commentSchema.index({ userId: 1 });
 commentSchema.index({ parentComment: 1 });
 
-// Virtual for replies
 commentSchema.virtual('replies', {
   ref: 'Comment',
   localField: '_id',
@@ -74,7 +72,6 @@ commentSchema.virtual('replies', {
   options: { sort: { createdAt: 1 } }
 });
 
-// Pre-save middleware to update parent comment reply count
 commentSchema.pre('save', async function(next) {
   if (this.isNew && this.parentComment) {
     await mongoose.model('Comment').findByIdAndUpdate(
@@ -85,7 +82,6 @@ commentSchema.pre('save', async function(next) {
   next();
 });
 
-// Pre-remove middleware to update parent comment reply count
 commentSchema.pre('remove', async function(next) {
   if (this.parentComment) {
     await mongoose.model('Comment').findByIdAndUpdate(

@@ -11,6 +11,9 @@ const {
   updateComment,
   deleteComment,
   toggleCommentLike,
+  applyToJob,
+  updateApplicationStatus,
+  getJobApplications,
 } = require('../controllers/jobsController');
 const { protect } = require('../middleware/auth');
 
@@ -44,5 +47,15 @@ router.delete('/:jobId/comments/:commentId', protect, deleteComment);
 
 // PUT like/unlike comment (protected)
 router.put('/:jobId/comments/:commentId/like', protect, toggleCommentLike);
+
+// Application routes
+// POST apply to job (protected)
+router.post('/:id/apply', protect, applyToJob);
+
+// GET applications for a job (protected)
+router.get('/:id/applications', protect, getJobApplications);
+
+// PUT update application status (protected)
+router.put('/:jobId/applications/:applicationId', protect, updateApplicationStatus);
 
 module.exports = router;

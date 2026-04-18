@@ -55,6 +55,61 @@ exports.getWorkerDetails = async (req, res) => {
   }
 };
 
+exports.autoApprove = async (req, res) => {
+  try {
+    const { id } = req.params;
+    let { rating } = req.body;
+
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ success: false, message: 'Invalid user ID format' });
+    }
+    
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (rating) {
+      rating = parseFloat(rating);
+      if (isNaN(rating) || rating < 0.1 || rating > 5.0) {
+        return res.status(400).json({ success: false, message: 'Rating must be between 0.1 and 5.0' });
+      }
+      rating = Math.round(rating * 10) / 10;
+    }
+
+    // Set verification status
+    user.verificationStatus = 'verified';
+    user.isVerified = true;
+    user.verificationRejectedReason = null;
+    user.verificationReviewedAt = new Date();
+
+    // Set rating if provided
+    if (rating) {
+      user.adminRating = rating;
+      user.ratedAt = new Date();
+    }
+
+    await user.save({ validateModifiedOnly: true });
+
+    return res.json({
+      success: true,
+      message: `${user.userType.charAt(0).toUpperCase() + user.userType.slice(1)} verified and rated successfully`,
+      data: {
+        id: user._id,
+        verificationStatus: user.verificationStatus,
+        isVerified: user.isVerified,
+        adminRating: user.adminRating,
+        ratedAt: user.ratedAt,
+      },
+    });
+  } catch (error) {
+    console.error('autoApprove error:', error);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+}
+
+
 // Verify worker documents
 exports.verifyWorker = async (req, res) => {
   try {
@@ -430,7 +485,7 @@ exports.getAllUsers = async (req, res) => {
       join: user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
       plan: 'Basic',
       lastActive: 'Recently',
-      avatar: user.profileImage || (user.userType === 'vendor' ? user.companyLogo : 'https://randomuser.me/api/portraits/lego/1.jpg'),
+      profileImage: user.profileImage || (user.userType === 'vendor' ? user.companyLogo : null),
       phone: user.phone,
       city: user.city,
       role: user.role || (user.userType === 'vendor' ? 'Vendor' : 'Worker'),
@@ -482,7 +537,7 @@ exports.getUserDetails = async (req, res) => {
       createdAt: user.createdAt,
       plan: 'Basic',
       lastActive: 'Recently',
-      avatar: user.profileImage || (user.userType === 'vendor' ? user.companyLogo : 'https://randomuser.me/api/portraits/lego/1.jpg'),
+      avatar: user.profileImage || (user.userType === 'vendor' ? user.companyLogo : null),
       city: user.city,
       role: user.role || (user.userType === 'vendor' ? 'Vendor' : 'Worker'),
       experience: user.experience,

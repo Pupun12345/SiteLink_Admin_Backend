@@ -75,7 +75,6 @@ jobSchema.virtual('jobId').get(function() {
   return `REQ-${this._id.toString().slice(-4).toUpperCase()}`;
 });
 
-// Include virtuals in JSON
 jobSchema.set('toJSON', { virtuals: true });
 
 module.exports = mongoose.model('Job', jobSchema);

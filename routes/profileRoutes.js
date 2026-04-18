@@ -7,7 +7,10 @@ const {
   editCustomerProfile,
   editWorkerProfile,
   editVendorProfile,
-  getProfile 
+  createAdminProfile,
+  editAdminProfile,
+  getProfile,
+  changePassword
 } = require('../controllers/profileController');
 const { protect } = require('../middleware/auth');
 const upload = require('../middleware/upload');
@@ -51,7 +54,19 @@ router.put('/vendor/edit', protect, upload.fields([
   { name: 'panCardImage', maxCount: 1 }
 ]), editVendorProfile);
 
-// Get Profile (Common for all user types)
+// Admin Profile Routes
+router.post('/admin/create', protect, upload.fields([
+  { name: 'profileImage', maxCount: 1 }
+]), createAdminProfile);
+
+router.put('/admin/edit', protect, upload.fields([
+  { name: 'profileImage', maxCount: 1 }
+]), editAdminProfile);
+
+// Get Profile
 router.get('/me', protect, getProfile);
+
+// Change Password
+router.put('/change-password', protect, changePassword);
 
 module.exports = router;

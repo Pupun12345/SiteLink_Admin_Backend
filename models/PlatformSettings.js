@@ -34,25 +34,45 @@ platformSettingsSchema.statics.getOrCreateSettings = async function () {
   return settings;
 };
 
-platformSettingsSchema.updateVerificationRules = async function (userProfile, rules, updatedBy) {
-  const settings = await this.getOrCreateSettings();
-
+// Instance method to update verification rules
+platformSettingsSchema.methods.updateVerificationRules = async function (userProfile, rules, updatedBy) {
   if (userProfile === 'worker') {
-    settings.verificationRules.worker = {
-      ...settings.verificationRules.worker,
+    this.verificationRules.worker = {
+      ...this.verificationRules.worker,
       ...rules
     };
   } else if (userProfile === 'vendor') {
-    settings.verificationRules.vendor = {
-      ...settings.verificationRules.vendor,
+    this.verificationRules.vendor = {
+      ...this.verificationRules.vendor,
       ...rules
     };
   }
 
-  settings.updatedBy = updatedBy;
-  settings.updatedAt = new Date();
-  await settings.save();
-  return settings;
-}
+  this.updatedBy = updatedBy;
+  this.updatedAt = new Date();
+  await this.save();
+  return this;
+};
+
+// Instance method to update notifications
+platformSettingsSchema.methods.updateNotifications = async function (notifications, updatedBy) {
+  this.notifications = {
+    ...this.notifications,
+    ...notifications
+  };
+  this.updatedBy = updatedBy;
+  this.updatedAt = new Date();
+  await this.save();
+  return this;
+};
+
+// Instance method to update language
+platformSettingsSchema.methods.updateLanguage = async function (language, updatedBy) {
+  this.language = language;
+  this.updatedBy = updatedBy;
+  this.updatedAt = new Date();
+  await this.save();
+  return this;
+};
 
 module.exports = mongoose.model('PlatformSettings', platformSettingsSchema);

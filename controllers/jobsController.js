@@ -1,6 +1,7 @@
 const Job = require('../models/job');
 const User = require('../models/User');
 const Comment = require('../models/Comment');
+const Application = require('../models/Application');
 
 // @desc    Get all jobs
 // @route   GET /api/jobs
@@ -31,10 +32,20 @@ exports.getJobs = async (req, res) => {
       .populate('postedBy', 'name companyName')
       .sort({ createdAt: -1 });
 
+    // Update applicationsCount for each job from Application collection
+    const jobsWithCounts = await Promise.all(
+      jobs.map(async (job) => {
+        const count = await Application.countDocuments({ job: job._id });
+        const jobObj = job.toObject();
+        jobObj.applicationsCount = count;
+        return jobObj;
+      })
+    );
+
     res.status(200).json({
       success: true,
-      count: jobs.length,
-      data: jobs,
+      count: jobsWithCounts.length,
+      data: jobsWithCounts,
     });
   } catch (error) {
     res.status(500).json({
@@ -59,35 +70,42 @@ exports.getJobById = async (req, res) => {
       });
     }
 
-    // Get sample applicants (workers who might have applied)
-    const applicants = await User.find({ 
-      userType: 'worker',
-      verificationStatus: 'verified'
-    })
-    .select('name role profileImage createdAt')
-    .limit(5)
-    .sort({ createdAt: -1 });
+    const applications = await Application.find({ job: req.params.id })
+      .populate('applicant', 'name profileImage userType verificationStatus city dailyRate experience skills phone email')
+      .sort({ createdAt: -1 })
+      .limit(10);
 
-    // Transform applicants data
-    const transformedApplicants = applicants.map((applicant, index) => ({
-      id: applicant._id,
-      name: applicant.name,
-      role: applicant.role || 'Worker',
-      applied: index === 0 ? '2h ago' : index === 1 ? '5h ago' : new Date(applicant.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      status: index % 2 === 0 ? 'shortlisted' : 'pending',
-      avatar: applicant.profileImage || 'https://randomuser.me/api/portraits/lego/1.jpg'
-    }));
+    // Transform applications data
+    const transformedApplicants = applications.map((application) => {
+      const applicant = application.applicant;
+      const timeApplied = application.createdAt;
+      
+      return {
+        id: application._id,
+        applicantId: applicant._id,
+        name: applicant.name,
+        role: applicant.skills && applicant.skills.length > 0 ? applicant.skills[0].skillName : 'Worker',
+        status: application.status,
+        applied: timeApplied,
+        avatar: applicant.profileImage || `https://ui-avatars.io/api/?name=${encodeURIComponent(applicant.name)}&background=random`,
+        experience: applicant.experience || 'Not specified',
+        location: applicant.city || 'Not specified',
+        skills: applicant.skills ? applicant.skills.map(s => s.skillName) : [],
+        phone: applicant.phone,
+        email: applicant.email,
+        dailyRate: applicant.dailyRate || application.proposedRate,
+        coverLetter: application.coverLetter,
+        proposedRate: application.proposedRate,
+        availability: application.availability
+      };
+    });
 
-    // Format job data
+    const actualApplicationsCount = await Application.countDocuments({ job: req.params.id });
+    
     const jobData = {
       ...job.toJSON(),
-      id: job.jobId,
-      role: job.title,
-      vendor: job.company,
-      qty: job.quantity,
-      apps: job.applicationsCount.toString(),
-      date: new Date(job.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      applicants: transformedApplicants
+      applicants: transformedApplicants,
+      applicationsCount: actualApplicationsCount
     };
 
     res.status(200).json({
@@ -201,7 +219,6 @@ exports.getCommentsByJob = async (req, res) => {
       });
     }
 
-    // Build sort criteria
     let sortCriteria = {};
     switch (sortBy) {
       case 'oldest':
@@ -216,10 +233,8 @@ exports.getCommentsByJob = async (req, res) => {
         break;
     }
 
-    // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // Get main comments (not replies)
     const comments = await Comment.find({
       jobId,
       parentComment: null,
@@ -239,14 +254,12 @@ exports.getCommentsByJob = async (req, res) => {
     .skip(skip)
     .limit(parseInt(limit));
 
-    // Get total count for pagination
     const totalComments = await Comment.countDocuments({
       jobId,
       parentComment: null,
       status: 'active'
     });
 
-    // Transform comments data
     const transformedComments = comments.map(comment => ({
       _id: comment._id,
       comment: comment.comment,
@@ -562,6 +575,211 @@ exports.toggleCommentLike = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to toggle like',
+      error: error.message,
+    });
+  }
+};
+
+// @desc    Apply to a job
+// @route   POST /api/jobs/:id/apply
+// @access  Private
+exports.applyToJob = async (req, res) => {
+  try {
+    const { id: jobId } = req.params;
+    const applicantId = req.user.id;
+    const { coverLetter, proposedRate, availability } = req.body;
+
+    // Check if job exists
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: 'Job not found',
+      });
+    }
+
+    // Check if user is a worker
+    const user = await User.findById(applicantId);
+    if (user.userType !== 'worker') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only workers can apply to jobs',
+      });
+    }
+
+    const existingApplication = await Application.findOne({
+      job: jobId,
+      applicant: applicantId,
+    });
+
+    if (existingApplication) {
+      return res.status(400).json({
+        success: false,
+        message: 'You have already applied to this job',
+      });
+    }
+
+    const application = await Application.create({
+      job: jobId,
+      applicant: applicantId,
+      coverLetter,
+      proposedRate,
+      availability: availability || 'flexible',
+    });
+
+    await Job.findByIdAndUpdate(jobId, {
+      $inc: { applicationsCount: 1 }
+    });
+
+    await application.populate('applicant', 'name profileImage userType');
+
+    res.status(201).json({
+      success: true,
+      message: 'Application submitted successfully',
+      data: application,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to apply to job',
+      error: error.message,
+    });
+  }
+};
+
+// @desc    Update application status
+// @route   PUT /api/jobs/:jobId/applications/:applicationId
+// @access  Private
+exports.updateApplicationStatus = async (req, res) => {
+  try {
+    const { jobId, applicationId } = req.params;
+    const { status, notes } = req.body;
+    const userId = req.user.id;
+
+    // Check if job exists
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: 'Job not found',
+      });
+    }
+
+    if (job.postedBy.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to update this application',
+      });
+    }
+
+    const application = await Application.findOneAndUpdate(
+      { _id: applicationId, job: jobId },
+      {
+        status,
+        notes,
+        reviewedBy: userId,
+        reviewedAt: new Date(),
+      },
+      { new: true }
+    ).populate('applicant', 'name profileImage userType');
+
+    if (!application) {
+      return res.status(404).json({
+        success: false,
+        message: 'Application not found',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Application status updated successfully',
+      data: application,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update application status',
+      error: error.message,
+    });
+  }
+};
+
+// @desc    Get applications for a job
+// @route   GET /api/jobs/:id/applications
+// @access  Private
+exports.getJobApplications = async (req, res) => {
+  try {
+    const { id: jobId } = req.params;
+    const { status, page = 1, limit = 10 } = req.query;
+    const userId = req.user.id;
+
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: 'Job not found',
+      });
+    }
+
+    if (job.postedBy.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to view applications for this job',
+      });
+    }
+
+    let filter = { job: jobId };
+    if (status) {
+      filter.status = status;
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const applications = await Application.find(filter)
+      .populate('applicant', 'name profileImage userType verificationStatus city dailyRate experience skills phone email')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const totalApplications = await Application.countDocuments(filter);
+
+    const transformedApplications = applications.map((application) => {
+      const applicant = application.applicant;
+      return {
+        id: application._id,
+        applicantId: applicant._id,
+        name: applicant.name,
+        role: applicant.skills && applicant.skills.length > 0 ? applicant.skills[0].skillName : 'Worker',
+        status: application.status,
+        applied: application.createdAt,
+        avatar: applicant.profileImage || `https://ui-avatars.io/api/?name=${encodeURIComponent(applicant.name)}&background=random`,
+        experience: applicant.experience || 'Not specified',
+        location: applicant.city || 'Not specified',
+        skills: applicant.skills ? applicant.skills.map(s => s.skillName) : [],
+        phone: applicant.phone,
+        email: applicant.email,
+        dailyRate: applicant.dailyRate || application.proposedRate,
+        coverLetter: application.coverLetter,
+        proposedRate: application.proposedRate,
+        availability: application.availability,
+        reviewedAt: application.reviewedAt,
+        notes: application.notes
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      data: transformedApplications,
+      pagination: {
+        current: parseInt(page),
+        limit: parseInt(limit),
+        total: totalApplications,
+        pages: Math.ceil(totalApplications / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch applications',
       error: error.message,
     });
   }

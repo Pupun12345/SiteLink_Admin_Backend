@@ -7,23 +7,23 @@ const Job = require('../models/job');
 const Post = require('../models/Post');
 const Comment = require('../models/Comment');
 const Notification = require('../models/Notification');
+const { apiRequestTracker } = require('../middleware/apiTracker');
 
-// Get API request tracker from global scope
-const getApiRequestTracker = () => {
-  return global.apiRequestTracker || {
+
+const getApiRequestTracker= () => {
+  return apiRequestTracker || {
     requests: [],
     errors: [],
     startTime: Date.now()
   };
 };
 
-// Auto-generate system notifications based on system state
+// Generate system notifications based on system state
 const autoGenerateNotifications = async () => {
   try {
     const now = new Date();
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
     
-    // Check if we've already generated notifications in the last hour
     const recentSystemNotifications = await Notification.countDocuments({
       type: 'System',
       isSystemGenerated: true,
@@ -31,10 +31,10 @@ const autoGenerateNotifications = async () => {
     });
     
     if (recentSystemNotifications > 0) {
-      return; // Don't spam notifications
+      return;
     }
 
-    // Check memory usage
+    // Memory usage
     const memoryUsage = process.memoryUsage();
     const heapUsagePercent = (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100;
     
@@ -132,13 +132,13 @@ const autoGenerateNotifications = async () => {
   }
 };
 
-// Set up periodic notification generation (every 30 minutes)
+// Periodic notification generation (every 30 minutes)
 setInterval(autoGenerateNotifications, 30 * 60 * 1000);
 
 // Also run once on startup (after a delay)
-setTimeout(autoGenerateNotifications, 60000); // 1 minute after startup
+setTimeout(autoGenerateNotifications, 60000);
 
-// Helper function to get CPU usage
+// Function to get CPU usage
 const getCpuUsage = () => {
   return new Promise((resolve) => {
     const startMeasure = process.cpuUsage();
@@ -156,12 +156,10 @@ const getCpuUsage = () => {
   });
 };
 
-// Helper function to get disk usage
+// Function to get disk usage
 const getDiskUsage = async () => {
   try {
     const stats = await fs.promises.statSync(process.cwd());
-    // This is a simplified approach - in production, use a proper disk usage library
-    // For now, we'll calculate based on available space vs total space
     const totalSpace = os.totalmem(); // Using memory as proxy
     const freeSpace = os.freemem();
     const usedSpace = totalSpace - freeSpace;
@@ -173,7 +171,7 @@ const getDiskUsage = async () => {
   }
 };
 
-// Helper function to get real system logs from console/error logs
+// Function to get real system logs from console/error logs
 const getSystemLogs = async (limit = 20, level = 'all', timeframe = '24h') => {
   const logs = [];
   const now = new Date();
@@ -801,7 +799,7 @@ exports.exportSystemReport = async (req, res) => {
   }
 };
 
-// Helper function to format uptime
+// Function to format uptime
 function formatUptime(seconds) {
   const days = Math.floor(seconds / (24 * 60 * 60));
   const hours = Math.floor((seconds % (24 * 60 * 60)) / (60 * 60));

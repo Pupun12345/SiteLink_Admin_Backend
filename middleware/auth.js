@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const AdminUser = require('../models/AdminUser');
 const BlacklistedToken = require('../models/BlacklistedToken');
 
 exports.protect = async (req, res, next) => {
@@ -33,14 +34,26 @@ exports.protect = async (req, res, next) => {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Get user
-    req.user = await User.findById(decoded.id);
+    // Check if it's an admin user
+    if (decoded.type === 'admin_user') {
+      req.user = await AdminUser.findById(decoded.id);
+      if (!req.user || !req.user.isActive) {
+        return res.status(401).json({
+          success: false,
+          message: 'Admin user not found or inactive',
+        });
+      }
+      req.user.userType = 'admin';
+    } else {
+      // Get regular user
+      req.user = await User.findById(decoded.id);
 
-    if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: 'User not found',
-      });
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          message: 'User not found',
+        });
+      }
     }
 
     next();
@@ -77,6 +90,33 @@ exports.authorize = (...roles) => {
       return res.status(403).json({
         success: false,
         message: `User role '${req.user.role}' is not authorized to access this route`,
+      });
+    }
+
+    next();
+  };
+};
+
+
+exports.checkPermission = (permission) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized',
+      });
+    }
+
+    // Super admin has all permissions
+    if (req.user.userType === 'admin' && !req.user.permissions) {
+      return next();
+    }
+
+    // Check if admin user has the required permission
+    if (req.user.permissions && !req.user.permissions[permission]) {
+      return res.status(403).json({
+        success: false,
+        message: `Access denied. ${permission} permission required.`,
       });
     }
 

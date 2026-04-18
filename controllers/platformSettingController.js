@@ -1,7 +1,6 @@
 const planDetails = require('../models/PlanDetails');
 const PlatformSettings = require('../models/PlatformSettings');
 const Notification = require('../models/Notification');
-const { createWorkerProfile, createVendorProfile } = require('./profileController');
 
 const createAdminNotification = async (title, message, createdBy) => {
     try {
@@ -16,30 +15,55 @@ const createAdminNotification = async (title, message, createdBy) => {
             isSystemGenerated: false
         });
     } catch (error) {
-        console.error('Failed to create admin notification:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to create notification',
+            error: error.message
+        });
     }
 };
 
 exports.editPlanAmount = async (req, res) => {
     try {
         const { planName, amount } = req.body;
-        if (!planName || !amount) {
+        console.log('Received plan update request:', { planName, amount });
+        
+        if (!planName || amount === undefined) {
             return res.status(400).json({
                 success: false,
                 message: 'Plan name and amount are required'
             });
         }
 
-        const plan = await planDetails.findOne({ planName });
-        if (!plan) {
-            return res.status(404).json({
+        const planNameMapping = {
+            'basic': 'basic',
+            'pro': 'premium',
+            'premium': 'premium', 
+            'enterprise': 'enterprise'
+        };
+        
+        const normalizedPlanName = planName.toLowerCase();
+        const backendPlanName = planNameMapping[normalizedPlanName];
+        
+        if (!backendPlanName) {
+            return res.status(400).json({
                 success: false,
-                message: 'Plan not found'
+                message: 'Invalid plan name. Must be Basic, Pro, or Enterprise'
             });
         }
 
-        plan.amount = amount;
-        await plan.save();
+        let plan = await planDetails.findOne({ planName: backendPlanName });
+        if (!plan) {
+            plan = await planDetails.create({
+                planName: backendPlanName,
+                amount: parseFloat(amount)
+            });
+            console.log('Created new plan:', plan);
+        } else {
+            plan.amount = parseFloat(amount);
+            await plan.save();
+            console.log('Updated existing plan:', plan);
+        }
 
         return res.status(200).json({
             success: true,
@@ -54,46 +78,97 @@ exports.editPlanAmount = async (req, res) => {
             error: error.message
         });
     }
-}
+};
 
-//Useful when we attach email or phone number to notification settings
-// exports.notificationSettings = async (req, res) => {
-//     try {
-//         const { systemAlerts, subscriptionNotifications, userNotifications } = req.body;
+exports.notificationSettings = async (req, res) => {
+    try {
+        const notifications = req.body;
 
-//         const settings = await PlatformSettings.getOrCreateSettings();
+        const settings = await PlatformSettings.getOrCreateSettings();
+        
+        settings.notifications = {
+            ...settings.notifications,
+            ...notifications
+        };
+        settings.updatedBy = req.user.id;
+        settings.updatedAt = new Date();
+        await settings.save();
 
-//         const notificationUpdates = {};
-//         if (systemAlerts !== undefined) notificationUpdates.systemAlerts = systemAlerts;
-//         if (subscriptionNotifications !== undefined) notificationUpdates.subscriptionNotifications = subscriptionNotifications;
-//         if (userNotifications !== undefined) notificationUpdates.userNotifications = userNotifications;
+        try {
+            await createAdminNotification(
+                'Notification Settings Updated',
+                `Platform notification settings have been updated by ${req.user.name}`,
+                req.user.id
+            );
+        } catch (notificationError) {
+            console.warn('Failed to create notification:', notificationError.message);
+        }
 
-//         // Create admin notification
-//         await createAdminNotification(
-//             'Notification Settings Updated',
-//             `Platform notification settings have been updated by ${req.user.name}`,
-//             req.user.id
-//         );
+        return res.status(200).json({ 
+            success: true,
+            message: 'Notification settings updated successfully',
+            settings: settings.notifications
+        });
 
-//         return res.status(200).json({ 
-//             success: true,
-//             message: 'Notification settings updated successfully',
-//             settings: settings.notifications
-//         });
+    } catch (error) {
+        console.error('Notification settings error:', error);
+        return res.status(500).json({ 
+            success: false,
+            message: 'Internal server error',
+            error: error.message 
+        });
+    }
+};
 
-//     } catch (error) {
-//         console.error('Notification settings error:', error);
-//         return res.status(500).json({ 
-//             success: false,
-//             message: 'Internal server error',
-//             error: error.message 
-//         });
-//     }
-// }
+exports.languageSettings = async (req, res) => {
+    try {
+        const { language } = req.body;
+
+        if (!language) {
+            return res.status(400).json({
+                success: false,
+                message: 'Language is required'
+            });
+        }
+
+        const settings = await PlatformSettings.getOrCreateSettings();
+        
+        settings.language = language;
+        settings.updatedBy = req.user.id;
+        settings.updatedAt = new Date();
+        await settings.save();
+
+        try {
+            await createAdminNotification(
+                'Language Settings Updated',
+                `Platform language has been updated to ${language} by ${req.user.name}`,
+                req.user.id
+            );
+        } catch (notificationError) {
+            console.warn('Failed to create notification:', notificationError.message);
+        }
+
+        return res.status(200).json({ 
+            success: true,
+            message: 'Language settings updated successfully',
+            language: settings.language
+        });
+
+    } catch (error) {
+        console.error('Language settings error:', error);
+        return res.status(500).json({ 
+            success: false,
+            message: 'Internal server error',
+            error: error.message 
+        });
+    }
+};
 
 exports.verificationRulesSettings = async (req, res) => {
     try {
         const { userProfile, rules } = req.body;
+
+        console.log('Received verification rules request:', { userProfile, rules });
 
         if (!userProfile || !rules) {
             return res.status(400).json({
@@ -109,43 +184,37 @@ exports.verificationRulesSettings = async (req, res) => {
             });
         }
 
-        //FOR WORKERS RULES UPDATE
-        const workerRulesList = ['idProof', 'age', 'medicalCertificate'];
-
-        const requiredRulesWorker = {};
-        if (userProfile === 'worker') {
-            for (const rule of workerRulesList) {
-                if (rules[rule]) {
-                    requiredRulesWorker[rule] = rules[rule];
-                }
-            }
-        }
-        //FOR VENDORS RULES UPDATE
-        const vendorRulesList = ['gstNumber', 'licenseNumber', 'ownerName'];
-
-        const requiredRulesVendor = {};
-        if (userProfile === 'vendor') {
-            for (const rule of vendorRulesList) {
-                if (rules[rule]) {
-                    requiredRulesVendor[rule] = rules[rule];
-                }
-            }
-        }
-
         const settings = await PlatformSettings.getOrCreateSettings();
-
+        console.log('Current settings before update:', settings.verificationRules);
 
         if (userProfile === 'worker') {
-            await settings.updateVerificationRules(userProfile, requiredRulesWorker, req.user.id);
-        }else{
-            await settings.updateVerificationRules(userProfile, requiredRulesVendor, req.user.id);
+            settings.verificationRules.worker = {
+                ...settings.verificationRules.worker,
+                ...rules
+            };
+        } else if (userProfile === 'vendor') {
+            settings.verificationRules.vendor = {
+                ...settings.verificationRules.vendor,
+                ...rules
+            };
         }
 
-        await createAdminNotification(
-            'Verification Rules Updated',
-            `${userProfile.charAt(0).toUpperCase() + userProfile.slice(1)} verification rules updated by ${req.user.name}. Changes: ${rulesList}`,
-            req.user.id
-        );
+        settings.updatedBy = req.user.id;
+        settings.updatedAt = new Date();
+        await settings.save();
+
+        console.log('Settings after update:', settings.verificationRules);
+
+        try {
+            const rulesList = Object.keys(rules).join(', ');
+            await createAdminNotification(
+                'Verification Rules Updated',
+                `${userProfile.charAt(0).toUpperCase() + userProfile.slice(1)} verification rules updated by ${req.user.name}. Changes: ${rulesList}`,
+                req.user.id
+            );
+        } catch (notificationError) {
+            console.warn('Failed to create notification:', notificationError.message);
+        }
 
         return res.status(200).json({
             success: true,
@@ -161,7 +230,7 @@ exports.verificationRulesSettings = async (req, res) => {
             error: error.message
         });
     }
-}
+};
 
 exports.getSettings = async (req, res) => {
     try {

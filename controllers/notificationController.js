@@ -23,7 +23,7 @@ exports.getNotifications = async (req, res) => {
     let filter = {};
     
     if (type !== 'all') {
-      filter.type = all;
+      filter.type = type;
     }
     
     if (status !== 'all') {
@@ -201,7 +201,6 @@ exports.createNotification = async (req, res) => {
 
     const notification = await Notification.create(notificationData);
     
-    // Populate the created notification
     await notification.populate('createdBy', 'name email');
 
     res.status(201).json({
@@ -379,23 +378,6 @@ exports.generateSystemNotifications = async (req, res) => {
   try {
     const notifications = [];
 
-    // Always create at least one sample notification for testing
-    const sampleNotification = await Notification.createSystemNotification({
-      title: 'System Health Check',
-      message: 'Automated system health check completed successfully. All systems are operational.',
-      type: 'System',
-      category: 'info',
-      priority: 'low',
-      actionUrl: '/admin/system-monitoring',
-      actionText: 'View Details',
-      metadata: { 
-        automated: true,
-        timestamp: new Date().toISOString()
-      }
-    });
-    notifications.push(sampleNotification);
-
-    // Check for pending user verifications
     const pendingUsers = await User.countDocuments({ 
       verificationStatus: 'pending' 
     });
@@ -414,7 +396,7 @@ exports.generateSystemNotifications = async (req, res) => {
       notifications.push(notification);
     }
 
-    // Check for recent job postings
+    // Recent job postings
     const recentJobs = await Job.countDocuments({
       createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
     });
@@ -433,11 +415,11 @@ exports.generateSystemNotifications = async (req, res) => {
       notifications.push(notification);
     }
 
-    // Check system health (memory usage)
+    // System health (memory usage)
     const memoryUsage = process.memoryUsage();
     const heapUsagePercent = (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100;
 
-    if (heapUsagePercent > 70) { // Lower threshold for testing
+    if (heapUsagePercent > 70) {
       const notification = await Notification.createSystemNotification({
         title: 'Memory Usage Alert',
         message: `System memory usage is at ${heapUsagePercent.toFixed(1)}%`,
@@ -453,45 +435,6 @@ exports.generateSystemNotifications = async (req, res) => {
         }
       });
       notifications.push(notification);
-    }
-
-    // Create a few more sample notifications for testing
-    const sampleNotifications = [
-      {
-        title: 'Security Alert',
-        message: 'Multiple failed login attempts detected from suspicious IP addresses.',
-        type: 'Security',
-        category: 'error',
-        priority: 'high',
-        actionUrl: '/admin/security',
-        actionText: 'Review Security'
-      },
-      {
-        title: 'Payment Processing',
-        message: 'Monthly subscription payments have been processed successfully.',
-        type: 'Payment',
-        category: 'success',
-        priority: 'low',
-        actionUrl: '/admin/payments',
-        actionText: 'View Payments'
-      },
-      {
-        title: 'User Registration Spike',
-        message: 'Unusual increase in user registrations detected in the last hour.',
-        type: 'User',
-        category: 'info',
-        priority: 'medium',
-        actionUrl: '/admin/users',
-        actionText: 'View Users'
-      }
-    ];
-
-    // Create sample notifications randomly
-    for (const sample of sampleNotifications) {
-      if (Math.random() > 0.5) { // 50% chance to create each
-        const notification = await Notification.createSystemNotification(sample);
-        notifications.push(notification);
-      }
     }
 
     res.status(200).json({
