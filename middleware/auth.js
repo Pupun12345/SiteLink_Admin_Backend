@@ -67,7 +67,8 @@ exports.protect = async (req, res, next) => {
 
 
 exports.adminOnly = (req, res, next) => {
-  if (req.user && req.user.userType === 'admin') {
+  // Allow both super admin admin users (with permissions object)
+  if (req.user && (req.user.userType === 'admin' || req.user.permissions)) {
     next();
   } else {
     return res.status(403).json({
@@ -97,29 +98,3 @@ exports.authorize = (...roles) => {
   };
 };
 
-
-exports.checkPermission = (permission) => {
-  return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Not authorized',
-      });
-    }
-
-    // Super admin has all permissions
-    if (req.user.userType === 'admin' && !req.user.permissions) {
-      return next();
-    }
-
-    // Check if admin user has the required permission
-    if (req.user.permissions && !req.user.permissions[permission]) {
-      return res.status(403).json({
-        success: false,
-        message: `Access denied. ${permission} permission required.`,
-      });
-    }
-
-    next();
-  };
-};

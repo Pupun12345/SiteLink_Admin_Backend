@@ -217,6 +217,15 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
+  whatsappNumber: {
+    type: String,
+    trim: true,
+    default: null,
+    match: [
+      /^[6-9]\d{9}$/,
+      'Please provide a valid 10-digit WhatsApp number',
+    ],
+  },
   emergencyContact: {
     type: String,
     default: null,

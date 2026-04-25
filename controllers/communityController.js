@@ -12,7 +12,7 @@ exports.getCommunityFeed = async (req, res) => {
     const category = req.query.category || null;
     const posterType = req.query.posterType || null;
 
-    let filter = { isActive: true };
+    let filter = { isActive: true, approvalStatus: 'approved' };
 
     if (category) {
       filter.category = category;
@@ -91,8 +91,8 @@ exports.createPost = async (req, res) => {
     }
 
     // Handle image uploads
-    const images = req.files && req.files.images
-      ? req.files.images.map(file => `/uploads/${file.path.split('uploads')[1]}`)
+    const images = req.files && req.files.length > 0
+      ? req.files.map(file => `/uploads/posts/${file.filename}`)
       : [];
 
     const postData = {
@@ -234,6 +234,162 @@ exports.deletePost = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error deleting post',
+      error: error.message,
+    });
+  }
+};
+
+// @desc    Get pending posts for admin approval
+// @route   GET /api/community/posts/pending
+// @access  Admin only
+exports.getPendingPosts = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const posts = await Post.find({ approvalStatus: 'pending' })
+      .populate('postedBy', 'name profileImage userType')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Post.countDocuments({ approvalStatus: 'pending' });
+
+    res.status(200).json({
+      success: true,
+      data: posts,
+      pagination: {
+        current: page,
+        limit: limit,
+        total: total,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching pending posts',
+      error: error.message,
+    });
+  }
+};
+
+// @desc    Approve a post
+// @route   PUT /api/community/posts/:postId/approve
+// @access  Admin only
+exports.approvePost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const adminId = req.user._id;
+
+    const post = await Post.findById(postId);
+
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: 'Post not found',
+      });
+    }
+
+    post.approvalStatus = 'approved';
+    post.approvedBy = adminId;
+    post.approvedAt = new Date();
+    post.autoApproved = false;
+
+    await post.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Post approved successfully',
+      data: post,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error approving post',
+      error: error.message,
+    });
+  }
+};
+
+// @desc    Reject a post
+// @route   PUT /api/community/posts/:postId/reject
+// @access  Admin only
+exports.rejectPost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { reason } = req.body;
+    const adminId = req.user._id;
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rejection reason is required',
+      });
+    }
+
+    const post = await Post.findById(postId);
+
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: 'Post not found',
+      });
+    }
+
+    post.approvalStatus = 'rejected';
+    post.approvedBy = adminId;
+    post.approvedAt = new Date();
+    post.rejectionReason = reason.trim();
+    post.isActive = false;
+
+    await post.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Post rejected successfully',
+      data: post,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error rejecting post',
+      error: error.message,
+    });
+  }
+};
+
+// @desc    Auto-approve posts older than 1 hour
+// @route   POST /api/community/posts/auto-approve
+// @access  System/Cron
+exports.autoApprovePosts = async (req, res) => {
+  try {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+
+    const result = await Post.updateMany(
+      {
+        approvalStatus: 'pending',
+        createdAt: { $lte: oneHourAgo },
+      },
+      {
+        $set: {
+          approvalStatus: 'approved',
+          autoApproved: true,
+          approvedAt: new Date(),
+        },
+      }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: `Auto-approved ${result.modifiedCount} posts`,
+      count: result.modifiedCount,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error auto-approving posts',
       error: error.message,
     });
   }

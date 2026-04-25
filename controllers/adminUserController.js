@@ -1,5 +1,6 @@
 const AdminUser = require('../models/AdminUser');
 const jwt = require('jsonwebtoken');
+const { sendTokenResponse } = require('../utils/tokenUtils');
 
 // Create new admin user
 exports.createAdminUser = async (req, res) => {
@@ -126,11 +127,13 @@ exports.adminUserLogin = async (req, res) => {
 
     const adminUser = await AdminUser.findOne({ email, isActive: true }).select('+password');
     if (!adminUser) {
+      console.log('AdminUser not found or inactive:', email);
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
     const isMatch = await adminUser.comparePassword(password);
     if (!isMatch) {
+      console.log('Password mismatch for AdminUser:', email);
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
@@ -156,6 +159,24 @@ exports.adminUserLogin = async (req, res) => {
     });
   } catch (error) {
     console.error('adminUserLogin error:', error);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+
+exports.getAdminUserProfile = async (req, res) => {
+  try {
+    const adminUser = await AdminUser.findById(req.user._id).select('email name permissions');
+    if (!adminUser) {
+      return res.status(404).json({ success: false, message: 'Admin user not found' });
+    }
+
+    return res.json({
+      success: true,
+      data: adminUser,
+    });
+  } catch (error) {
+    console.error('getAdminUserProfile error:', error);
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 };

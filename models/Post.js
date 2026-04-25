@@ -20,7 +20,7 @@ const postSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ['work', 'project', 'skill', 'general', 'announcement'],
+      enum: ['work', 'project', 'skill', 'general', 'announcement', 'question', 'discussion', 'achievement', 'help'],
       default: 'general',
     },
     postedBy: {
@@ -98,6 +98,28 @@ const postSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    approvalStatus: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending',
+    },
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    approvedAt: {
+      type: Date,
+      default: null,
+    },
+    rejectionReason: {
+      type: String,
+      default: null,
+    },
+    autoApproved: {
+      type: Boolean,
+      default: false,
     },
     createdAt: {
       type: Date,

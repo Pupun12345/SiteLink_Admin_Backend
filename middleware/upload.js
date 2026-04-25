@@ -5,12 +5,16 @@ const fs = require('fs');
 // Ensure uploads directories exist
 const profileDir = 'uploads/profiles';
 const documentsDir = 'uploads/documents';
+const postsDir = 'uploads/posts';
 
 if (!fs.existsSync(profileDir)) {
   fs.mkdirSync(profileDir, { recursive: true });
 }
 if (!fs.existsSync(documentsDir)) {
   fs.mkdirSync(documentsDir, { recursive: true });
+}
+if (!fs.existsSync(postsDir)) {
+  fs.mkdirSync(postsDir, { recursive: true });
 }
 
 // Configure storage
@@ -21,6 +25,8 @@ const storage = multer.diskStorage({
       cb(null, profileDir);
     } else if (file.fieldname === 'aadhaarFrontImage' || file.fieldname === 'aadhaarBackImage'|| file.fieldname === 'panCardImage') {
       cb(null, documentsDir);
+    } else if (file.fieldname === 'images') {
+      cb(null, postsDir);
     } else {
       cb(null, profileDir);
     }
@@ -41,6 +47,9 @@ const storage = multer.diskStorage({
     }
     else if (file.fieldname === 'panCardImage'){
       prefix = 'pan-card';
+    }
+    else if (file.fieldname === 'images'){
+      prefix = 'post';
     }
     
     cb(null, prefix + '-' + uniqueSuffix + path.extname(file.originalname));

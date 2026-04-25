@@ -1,40 +1,45 @@
 const PlatformSettings = require('../models/PlatformSettings');
 const User = require('../models/User');
-const AdminUser = require('../models/AdminUser');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
 
-// Get Profile - Updated to support both User and AdminUser
+// Get Profile
 exports.getProfile = async (req, res) => {
   try {
-    let user = null;
-    
-    // Try to find as AdminUser first
-    user = await AdminUser.findById(req.user.id);
-    
-    // If not found, try as regular User
-    if (!user) {
-      user = await User.findById(req.user.id);
+    // Check if user is from AdminUser model (has permissions object)
+    if (req.user.permissions) {
+      return res.json({
+        success: true,
+        user: {
+          id: req.user._id,
+          name: req.user.name,
+          email: req.user.email,
+          role: 'admin_user',
+          profileImage: req.user.profileImage,
+          permissions: req.user.permissions,
+          createdAt: req.user.createdAt
+        }
+      });
     }
+
+    const user = await User.findById(req.user.id);
 
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
     // Return appropriate response based on user type
-    if (user.userType === 'admin' || user.role === 'admin' || user.role === 'super_admin') {
-      // AdminUser response
+    if (user.role === 'admin' || user.role === 'super_admin') {
       return res.json({
         success: true,
         user: {
           id: user._id,
           name: user.name,
           email: user.email,
+          phone: user.phone,
           role: user.role,
-          permissions: user.permissions,
-          createdAt: user.createdAt,
-          lastLogin: user.lastLogin,
-          isActive: user.isActive
+          profileImage: user.profileImage,
+          createdAt: user.createdAt
         }
       });
     }
@@ -75,11 +80,12 @@ exports.getProfile = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Get profile error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Change Password - Updated to support both User and AdminUser
+// Change Password
 exports.changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -88,15 +94,7 @@ exports.changePassword = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide current and new password' });
     }
 
-    let user = null;
-    
-    // Try to find as AdminUser first
-    user = await AdminUser.findById(req.user.id).select('+password');
-    
-    // If not found, try as regular User
-    if (!user) {
-      user = await User.findById(req.user.id).select('+password');
-    }
+    const user = await User.findById(req.user.id).select('+password');
 
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
@@ -245,9 +243,15 @@ exports.createVendorProfile = async (req, res) => {
       }
     }
 
-    const { name, email, city, ownerName, companyName, panNumber, gstNumber, licenseNumber, projectTypes, role } = req.body;
+    const { name, email, city, ownerName, companyName, panNumber, gstNumber, licenseNumber, projectTypes, role, whatsappNumber, website } = req.body;
     if (!role) {
       return res.status(400).json({ success: false, message: 'Role is required' });
+    }
+    if (!whatsappNumber) {
+      return res.status(400).json({ success: false, message: 'WhatsApp number is required for vendors' });
+    }
+    if (!website) {
+      return res.status(400).json({ success: false, message: 'Website is required for vendors' });
     }
     if (name) user.name = name;
     if (email) user.email = email;
@@ -257,6 +261,8 @@ exports.createVendorProfile = async (req, res) => {
     if (panNumber) user.panNumber = panNumber;
     if (gstNumber) user.gstNumber = gstNumber;
     if (licenseNumber) user.licenseNumber = licenseNumber;
+    if (whatsappNumber) user.whatsappNumber = whatsappNumber;
+    if (website) user.website = website;
     if (projectTypes) user.projectTypes = typeof projectTypes === 'string' ? JSON.parse(projectTypes) : projectTypes;
     user.role = role;
 
@@ -425,7 +431,7 @@ exports.editVendorProfile = async (req, res) => {
       }
     }
 
-    const { name, email, city, ownerName, companyName, panNumber, gstNumber, licenseNumber, projectTypes } = req.body;
+    const { name, email, city, ownerName, companyName, panNumber, gstNumber, licenseNumber, projectTypes, whatsappNumber, website } = req.body;
     const updateData = {};
     if (name) updateData.name = name;
     if (email) updateData.email = email;
@@ -435,6 +441,8 @@ exports.editVendorProfile = async (req, res) => {
     if (panNumber) updateData.panNumber = panNumber;
     if (gstNumber) updateData.gstNumber = gstNumber;
     if (licenseNumber) updateData.licenseNumber = licenseNumber;
+    if (whatsappNumber) updateData.whatsappNumber = whatsappNumber;
+    if (website) updateData.website = website;
     if (projectTypes) updateData.projectTypes = typeof projectTypes === 'string' ? JSON.parse(projectTypes) : projectTypes;
 
     if (req.files) {
@@ -469,17 +477,13 @@ exports.editVendorProfile = async (req, res) => {
 exports.createAdminProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    if (!user || user.userType !== 'admin') {
+    if (!user || user.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
-    const { name, email, role } = req.body;
-    if (!role) {
-      return res.status(400).json({ success: false, message: 'Role is required' });
-    }
+    const { name, email } = req.body;
     if (name) user.name = name;
     if (email) user.email = email;
-    user.role = role;
 
     if (req.files?.profileImage) user.profileImage = req.files.profileImage[0].path;
 
@@ -488,9 +492,16 @@ exports.createAdminProfile = async (req, res) => {
     res.json({
       success: true,
       message: 'Admin profile created successfully',
-      user: { id: user._id, name: user.name, phone: user.phone, email: user.email, userType: user.userType, role: user.role, profileImage: user.profileImage }
+      user: { 
+        id: user._id, 
+        name: user.name, 
+        email: user.email, 
+        role: user.role, 
+        profileImage: user.profileImage 
+      }
     });
   } catch (error) {
+    console.error('Create admin profile error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -499,29 +510,42 @@ exports.createAdminProfile = async (req, res) => {
 exports.editAdminProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    if (!user || user.userType !== 'admin') {
+    console.log('Found user:', user ? user._id : 'not found');
+    
+    if (!user || user.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
     const { name, email } = req.body;
-    const updateData = {};
-    if (name) updateData.name = name;
-    if (email) updateData.email = email;
+    if (name) user.name = name;
+    if (email) user.email = email;
 
     if (req.files?.profileImage) {
-      if (user.profileImage) fs.unlink(user.profileImage, () => { });
-      updateData.profileImage = req.files.profileImage[0].path;
+      console.log('New profile image uploaded:', req.files.profileImage[0].path);
+      if (user.profileImage) {
+        fs.unlink(user.profileImage, (err) => {
+          if (err) console.error('Error deleting old profile image:', err);
+        });
+      }
+      user.profileImage = req.files.profileImage[0].path;
     }
 
-    Object.assign(user, updateData);
     await user.save();
+    console.log('User saved successfully with profileImage:', user.profileImage);
 
     res.json({
       success: true,
       message: 'Admin profile updated successfully',
-      user: { id: user._id, name: user.name, phone: user.phone, email: user.email, userType: user.userType, role: user.role, profileImage: user.profileImage }
+      user: { 
+        id: user._id, 
+        name: user.name, 
+        email: user.email, 
+        role: user.role, 
+        profileImage: user.profileImage 
+      }
     });
   } catch (error) {
+    console.error('Edit admin profile error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

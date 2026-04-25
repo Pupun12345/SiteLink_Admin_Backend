@@ -14,8 +14,10 @@ const {
   getAllUsers,
   getUserDetails,
   autoApprove,
+  addSkillsToWorker,
+  removeSkillFromWorker,
 } = require('../controllers/adminController');
-const { protect, adminOnly, checkPermission } = require('../middleware/auth');
+const { protect, adminOnly } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -24,27 +26,29 @@ router.use(protect);
 router.use(adminOnly);
 
 // Admin-only user management
-router.get('/users', checkPermission('canManageUsers'), getAllUsers);
-router.get('/users/:id', checkPermission('canManageUsers'), getUserDetails);
-router.put('/users/:id/verify', checkPermission('canVerifyUsers'), verifyWorker);
-router.put('/users/:id/reject', checkPermission('canVerifyUsers'), rejectWorker);
-router.put('/users/:id/rate', checkPermission('canVerifyUsers'), rateWorker);
+router.get('/users', getAllUsers);
+router.get('/users/:id', getUserDetails);
+router.put('/users/:id/verify', verifyWorker);
+router.put('/users/:id/reject', rejectWorker);
+router.put('/users/:id/rate', rateWorker);
 
 // Admin-only worker verification endpoints
-router.get('/workers/pending', checkPermission('canVerifyUsers'), getPendingWorkers);
-router.get('/workers/:id', checkPermission('canVerifyUsers'), getWorkerDetails);
-router.put('/workers/:id/verify', checkPermission('canVerifyUsers'), verifyWorker);
-router.put('/workers/:id/auto-verify', checkPermission('canVerifyUsers'), autoApprove);
-router.put('/workers/:id/reject', checkPermission('canVerifyUsers'), rejectWorker);
-router.put('/workers/:id/rate', checkPermission('canVerifyUsers'), rateWorker);
+router.get('/workers/pending', getPendingWorkers);
+router.get('/workers/:id', getWorkerDetails);
+router.put('/workers/:id/verify', verifyWorker);
+router.put('/workers/:id/auto-verify', autoApprove);
+router.put('/workers/:id/reject', rejectWorker);
+router.put('/workers/:id/rate', rateWorker);
+router.put('/workers/:id/skills', addSkillsToWorker);
+router.delete('/workers/:id/skills/:skillId', removeSkillFromWorker);
 
 // Admin-only vendor verification endpoints
-router.get('/vendors/pending', checkPermission('canVerifyUsers'), getPendingVendors);
-router.get('/vendors', checkPermission('canVerifyUsers'), getVendors);
-router.get('/vendors/:id', checkPermission('canVerifyUsers'), getVendorDetails);
-router.put('/vendors/:id/verify', checkPermission('canVerifyUsers'), verifyVendor);
-router.put('/vendors/:id/auto-verify', checkPermission('canVerifyUsers'), autoApprove);
-router.put('/vendors/:id/reject', checkPermission('canVerifyUsers'), rejectVendor);
-router.put('/vendors/:id/rate', checkPermission('canVerifyUsers'), rateVendor);
+router.get('/vendors/pending', getPendingVendors);
+router.get('/vendors', getVendors);
+router.get('/vendors/:id', getVendorDetails);
+router.put('/vendors/:id/verify', verifyVendor);
+router.put('/vendors/:id/auto-verify', autoApprove);
+router.put('/vendors/:id/reject', rejectVendor);
+router.put('/vendors/:id/rate', rateVendor);
 
 module.exports = router;

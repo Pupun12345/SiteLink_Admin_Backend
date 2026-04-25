@@ -6,7 +6,7 @@ const {
   languageSettings,
   getSettings,
 } = require('../controllers/platformSettingController');
-const { protect, checkPermission } = require('../middleware/auth');
+const { protect } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -24,7 +24,6 @@ const adminOnly = (req, res, next) => {
 
 router.use(protect);
 router.use(adminOnly);
-router.use(checkPermission('canAccessPlatformSettings'));
 
 // Platform settings routes
 router.get('/', getSettings);

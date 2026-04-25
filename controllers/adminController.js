@@ -242,13 +242,94 @@ exports.rateWorker = async (req, res) => {
   }
 };
 
+// Add skills to worker (admin only)
+exports.addSkillsToWorker = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { skills } = req.body;
+
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ success: false, message: 'Invalid user ID format' });
+    }
+
+    if (!skills || !Array.isArray(skills) || skills.length === 0) {
+      return res.status(400).json({ success: false, message: 'Skills array is required' });
+    }
+
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (user.userType !== 'worker') {
+      return res.status(400).json({ success: false, message: 'Can only add skills to workers' });
+    }
+
+    // Merge new skills with existing ones, avoiding duplicates
+    const existingSkillIds = user.skills.map(s => s.skillId);
+    const newSkills = skills.filter(skill => !existingSkillIds.includes(skill.skillId));
+    
+    user.skills = [...user.skills, ...newSkills];
+    await user.save({ validateModifiedOnly: true });
+
+    return res.json({
+      success: true,
+      message: 'Skills added successfully',
+      data: {
+        id: user._id,
+        skills: user.skills,
+      },
+    });
+  } catch (error) {
+    console.error('addSkillsToWorker error:', error);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// Remove skill from worker (admin only)
+exports.removeSkillFromWorker = async (req, res) => {
+  try {
+    const { id, skillId } = req.params;
+
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ success: false, message: 'Invalid user ID format' });
+    }
+
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (user.userType !== 'worker') {
+      return res.status(400).json({ success: false, message: 'Can only remove skills from workers' });
+    }
+
+    user.skills = user.skills.filter(skill => skill.skillId !== parseInt(skillId));
+    await user.save({ validateModifiedOnly: true });
+
+    return res.json({
+      success: true,
+      message: 'Skill removed successfully',
+      data: {
+        id: user._id,
+        skills: user.skills,
+      },
+    });
+  } catch (error) {
+    console.error('removeSkillFromWorker error:', error);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
 // Get list of vendors pending document verification
 exports.getPendingVendors = async (req, res) => {
   try {
     const vendors = await User.find({
       userType: 'vendor',
       verificationStatus: 'pending',
-    }).select('companyName ownerName phone city companyLogo verificationStatus createdAt email gstNumber');
+    }).select('companyName ownerName phone city companyLogo verificationStatus createdAt email gstNumber whatsappNumber website');
 
     return res.json({
       success: true,
@@ -272,7 +353,7 @@ exports.getVendors = async (req, res) => {
     }
 
     const vendors = await User.find(query).select(
-      'companyName ownerName phone city companyLogo verificationStatus createdAt email gstNumber adminRating projectTypes panCardImage'
+      'companyName ownerName phone city companyLogo verificationStatus createdAt email gstNumber adminRating projectTypes panCardImage whatsappNumber website'
     );
 
     return res.json({
@@ -297,7 +378,7 @@ exports.getVendorDetails = async (req, res) => {
     }
 
     const vendor = await User.findById(id).select(
-      'companyName ownerName phone email city gstNumber panNumber licenseNumber panCardImage companyLogo verificationStatus isVerified projectTypes userType adminRating adminRatingComment ratedAt'
+      'companyName ownerName phone email city gstNumber panNumber licenseNumber panCardImage companyLogo verificationStatus isVerified projectTypes userType adminRating adminRatingComment ratedAt whatsappNumber website'
     );
 
     if (!vendor || vendor.userType !== 'vendor') {
