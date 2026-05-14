@@ -20,6 +20,7 @@ const sendTokenResponse = (user, statusCode, res) => {
     role: user.role,
     profileImage: user.profileImage,
     isVerified: user.isVerified,
+    isPhoneVerified: user.isPhoneVerified,
   };
 
   // Add worker-specific fields

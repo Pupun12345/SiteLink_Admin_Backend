@@ -1,89 +1,52 @@
-const PlatformSettings = require('../models/PlatformSettings');
 const User = require('../models/User');
+const PlatformSettings = require('../models/PlatformSettings');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
+const AdminUser = require('../models/AdminUser');
 
 // Get Profile
-exports.getProfile = async (req, res) => {
+exports.getProfile=async(req, res)=>{
   try {
-    // Check if user is from AdminUser model (has permissions object)
-    if (req.user.permissions) {
+    const adminUser=await AdminUser.findById(req.user.id);
+
+    if(adminUser){
       return res.json({
-        success: true,
-        user: {
-          id: req.user._id,
-          name: req.user.name,
-          email: req.user.email,
-          role: 'admin_user',
-          profileImage: req.user.profileImage,
-          permissions: req.user.permissions,
-          createdAt: req.user.createdAt
+        success:true,
+        user:{
+          id:adminUser._id,
+          name:adminUser.name,
+          email:adminUser.email,
+          role:'Admin User',
+          profileImage:adminUser.profileImage,
+          permissions:adminUser.permissions,
+          createdAt:adminUser.createdAt
         }
-      });
+      })
+    }
+    
+    const regularUser=await User.findById(req.user.id);
+
+    if(!regularUser){
+      return res.status(404).json({success:false,message:'User not found'});
     }
 
-    const user = await User.findById(req.user.id);
-
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    // Return appropriate response based on user type
-    if (user.role === 'admin' || user.role === 'super_admin') {
-      return res.json({
-        success: true,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          phone: user.phone,
-          role: user.role,
-          profileImage: user.profileImage,
-          createdAt: user.createdAt
-        }
-      });
-    }
-
-    // Regular User response
-    res.json({
-      success: true,
-      user: {
-        id: user._id,
-        name: user.name,
-        phone: user.phone,
-        email: user.email,
-        userType: user.userType,
-        role: user.role,
-        profileImage: user.profileImage,
-        aadhaarFrontImage: user.aadhaarFrontImage,
-        aadhaarBackImage: user.aadhaarBackImage,
-        medicalCertificate: user.medicalCertificate,
-        panCardImage: user.panCardImage,
-        city: user.city,
-        dailyRate: user.dailyRate,
-        aadhaarNumber: user.aadhaarNumber,
-        experience: user.experience,
-        skills: user.skills,
-        companyLogo: user.companyLogo,
-        ownerName: user.ownerName,
-        companyName: user.companyName,
-        panNumber: user.panNumber,
-        gstNumber: user.gstNumber,
-        licenseNumber: user.licenseNumber,
-        projectTypes: user.projectTypes,
-        certificates: user.certificates,
-        isVerified: user.isVerified,
-        verificationStatus: user.verificationStatus,
-        verificationRejectedReason: user.verificationRejectedReason,
-        verificationReviewedAt: user.verificationReviewedAt,
-        createdAt: user.createdAt
+    return res.json({
+      success:true,
+      user:{
+        id:regularUser._id,
+        name:regularUser.name,
+        email:regularUser.email,
+        role:"Super Admin",
+        profileImage:regularUser.profileImage,
+        userType:regularUser.userType,
+        createdAt:regularUser.createdAt
       }
-    });
+    })  
+    
   } catch (error) {
-    console.error('Get profile error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({success:false,message:"Internal server error"});
   }
-};
+}
 
 // Change Password
 exports.changePassword = async (req, res) => {
@@ -140,6 +103,38 @@ exports.createCustomerProfile = async (req, res) => {
       success: true,
       message: 'Customer profile created successfully',
       user: { id: user._id, name: user.name, phone: user.phone, email: user.email, userType: user.userType, role: user.role, profileImage: user.profileImage, city: user.city }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Edit Profile - Customer
+exports.editCustomerProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user || user.userType !== 'customer') {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    const { name, email, city } = req.body;
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (email) updateData.email = email;
+    if (city) updateData.city = city;
+
+    if (req.files?.profileImage) {
+      if (user.profileImage) fs.unlink(user.profileImage, () => { });
+      updateData.profileImage = req.files.profileImage[0].path;
+    }
+
+    Object.assign(user, updateData);
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Customer profile updated successfully',
+      user: { id: user._id, name: user.name, phone: user.phone, email: user.email, userType: user.userType, profileImage: user.profileImage, city: user.city }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -243,33 +238,27 @@ exports.createVendorProfile = async (req, res) => {
       }
     }
 
-    const { name, email, city, ownerName, companyName, panNumber, gstNumber, licenseNumber, projectTypes, role, whatsappNumber, website } = req.body;
-    if (!role) {
-      return res.status(400).json({ success: false, message: 'Role is required' });
-    }
-    if (!whatsappNumber) {
-      return res.status(400).json({ success: false, message: 'WhatsApp number is required for vendors' });
-    }
-    if (!website) {
-      return res.status(400).json({ success: false, message: 'Website is required for vendors' });
-    }
+    const { companyName, name, email, designation, city, workArea, gstNumber, whatsappNumber, website } = req.body;
+
+    if (!companyName) return res.status(400).json({ success: false, message: 'Company name is required' });
+    if (!name) return res.status(400).json({ success: false, message: 'Name is required' });
+    if (!designation) return res.status(400).json({ success: false, message: 'Designation is required' });
+
+    if (companyName) user.companyName = companyName;
     if (name) user.name = name;
     if (email) user.email = email;
+    if (designation) user.designation = designation;
     if (city) user.city = city;
-    if (ownerName) user.ownerName = ownerName;
-    if (companyName) user.companyName = companyName;
-    if (panNumber) user.panNumber = panNumber;
+    if (workArea) user.workArea = workArea;
     if (gstNumber) user.gstNumber = gstNumber;
-    if (licenseNumber) user.licenseNumber = licenseNumber;
     if (whatsappNumber) user.whatsappNumber = whatsappNumber;
     if (website) user.website = website;
-    if (projectTypes) user.projectTypes = typeof projectTypes === 'string' ? JSON.parse(projectTypes) : projectTypes;
-    user.role = role;
+    user.role = designation;
+    user.userType = 'vendor';
 
     if (req.files) {
       if (req.files.profileImage) user.profileImage = req.files.profileImage[0].path;
       if (req.files.companyLogo) user.companyLogo = req.files.companyLogo[0].path;
-      if (req.files.panCardImage) user.panCardImage = req.files.panCardImage[0].path;
     }
 
     await user.save();
@@ -277,39 +266,69 @@ exports.createVendorProfile = async (req, res) => {
     res.json({
       success: true,
       message: 'Vendor profile created successfully',
-      user: { id: user._id, name: user.name, phone: user.phone, email: user.email, userType: user.userType, role: user.role, profileImage: user.profileImage, city: user.city, ownerName: user.ownerName, companyName: user.companyName, panNumber: user.panNumber, gstNumber: user.gstNumber, licenseNumber: user.licenseNumber, projectTypes: user.projectTypes, companyLogo: user.companyLogo }
+      user: { id: user._id, name: user.name, phone: user.phone, email: user.email, userType: user.userType, role: user.role, profileImage: user.profileImage, companyName: user.companyName, companyLogo: user.companyLogo, designation: user.designation, city: user.city, workArea: user.workArea, gstNumber: user.gstNumber, whatsappNumber: user.whatsappNumber, website: user.website }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Edit Profile - Customer
-exports.editCustomerProfile = async (req, res) => {
+// Edit Profile - Vendor
+exports.editVendorProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    if (!user || user.userType !== 'customer') {
+    if (!user || user.userType !== 'vendor') {
       return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
-    const { name, email, city } = req.body;
-    const updateData = {};
-    if (name) updateData.name = name;
-    if (email) updateData.email = email;
-    if (city) updateData.city = city;
+    const mandatoryDocuments = await PlatformSettings.getOrCreateSettings().then(settings => settings.verificationRules.vendor);
 
-    if (req.files?.profileImage) {
-      if (user.profileImage) fs.unlink(user.profileImage, () => { });
-      updateData.profileImage = req.files.profileImage[0].path;
+    const fieldMap = {
+      gstNumber: () => req.body?.gstNumber,
+      licenseNumber: () => req.body?.licenseNumber,
+      ownerName: () => req.files?.ownerName
+    };
+
+    const rule = Object.entries(mandatoryDocuments);
+
+    for (const [key, value] of rule) {
+      if (value && !fieldMap[key]()) {
+        return res.status(400).json({
+          success: false,
+          message: `Missing mandatory document: ${key}`
+        });
+      }
     }
 
-    Object.assign(user, updateData);
+    const { companyName, name, email, designation, city, workArea, gstNumber, whatsappNumber, website } = req.body;
+
+    if (companyName) user.companyName = companyName;
+    if (name) user.name = name;
+    if (email) user.email = email;
+    if (designation) { user.designation = designation; user.role = designation; }
+    if (city) user.city = city;
+    if (workArea) user.workArea = workArea;
+    if (gstNumber) user.gstNumber = gstNumber;
+    if (whatsappNumber) user.whatsappNumber = whatsappNumber;
+    if (website) user.website = website;
+
+    if (req.files) {
+      if (req.files.profileImage) {
+        if (user.profileImage) fs.unlink(user.profileImage, () => {});
+        user.profileImage = req.files.profileImage[0].path;
+      }
+      if (req.files.companyLogo) {
+        if (user.companyLogo) fs.unlink(user.companyLogo, () => {});
+        user.companyLogo = req.files.companyLogo[0].path;
+      }
+    }
+
     await user.save();
 
     res.json({
       success: true,
-      message: 'Customer profile updated successfully',
-      user: { id: user._id, name: user.name, phone: user.phone, email: user.email, userType: user.userType, profileImage: user.profileImage, city: user.city }
+      message: 'Vendor profile updated successfully',
+      user: { id: user._id, name: user.name, phone: user.phone, email: user.email, userType: user.userType, role: user.role, profileImage: user.profileImage, companyName: user.companyName, companyLogo: user.companyLogo, designation: user.designation, city: user.city, workArea: user.workArea, gstNumber: user.gstNumber, whatsappNumber: user.whatsappNumber, website: user.website }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -398,75 +417,6 @@ exports.editWorkerProfile = async (req, res) => {
       success: true,
       message: 'Worker profile updated successfully',
       user: { id: user._id, name: user.name, phone: user.phone, email: user.email, userType: user.userType, profileImage: user.profileImage, city: user.city, dailyRate: user.dailyRate, aadhaarNumber: user.aadhaarNumber, experience: user.experience, skills: user.skills }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// Edit Profile - Vendor
-exports.editVendorProfile = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    if (!user || user.userType !== 'vendor') {
-      return res.status(403).json({ success: false, message: 'Access denied' });
-    }
-
-    const mandatoryDocuments = await PlatformSettings.getOrCreateSettings().then(settings => settings.verificationRules.vendor);
-
-    const fieldMap = {
-      gstNumber: () => req.body?.gstNumber,
-      licenseNumber: () => req.body?.licenseNumber,
-      ownerName: () => req.files?.ownerName
-    };
-
-    const rule = Object.entries(mandatoryDocuments);
-
-    for (const [key, value] of rule) {
-      if (value && !fieldMap[key]()) {
-        return res.status(400).json({
-          success: false,
-          message: `Missing mandatory document: ${key}`
-        });
-      }
-    }
-
-    const { name, email, city, ownerName, companyName, panNumber, gstNumber, licenseNumber, projectTypes, whatsappNumber, website } = req.body;
-    const updateData = {};
-    if (name) updateData.name = name;
-    if (email) updateData.email = email;
-    if (city) updateData.city = city;
-    if (ownerName) updateData.ownerName = ownerName;
-    if (companyName) updateData.companyName = companyName;
-    if (panNumber) updateData.panNumber = panNumber;
-    if (gstNumber) updateData.gstNumber = gstNumber;
-    if (licenseNumber) updateData.licenseNumber = licenseNumber;
-    if (whatsappNumber) updateData.whatsappNumber = whatsappNumber;
-    if (website) updateData.website = website;
-    if (projectTypes) updateData.projectTypes = typeof projectTypes === 'string' ? JSON.parse(projectTypes) : projectTypes;
-
-    if (req.files) {
-      if (req.files.profileImage) {
-        if (user.profileImage) fs.unlink(user.profileImage, () => { });
-        updateData.profileImage = req.files.profileImage[0].path;
-      }
-      if (req.files.companyLogo) {
-        if (user.companyLogo) fs.unlink(user.companyLogo, () => { });
-        updateData.companyLogo = req.files.companyLogo[0].path;
-      }
-      if (req.files.panCardImage) {
-        if (user.panCardImage) fs.unlink(user.panCardImage, () => { });
-        updateData.panCardImage = req.files.panCardImage[0].path;
-      }
-    }
-
-    Object.assign(user, updateData);
-    await user.save();
-
-    res.json({
-      success: true,
-      message: 'Vendor profile updated successfully',
-      user: { id: user._id, name: user.name, phone: user.phone, email: user.email, userType: user.userType, profileImage: user.profileImage, city: user.city, ownerName: user.ownerName, companyName: user.companyName, panNumber: user.panNumber, gstNumber: user.gstNumber, licenseNumber: user.licenseNumber, projectTypes: user.projectTypes, companyLogo: user.companyLogo }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

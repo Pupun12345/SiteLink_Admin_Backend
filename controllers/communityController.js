@@ -105,7 +105,7 @@ exports.createPost = async (req, res) => {
       companyName: user.companyName || user.ownerName || null,
       images,
       location: location || user.city || null,
-      verification: user.isVerified ? 'verified' : 'unverified',
+      verification: user.verificationStatus === 'verified' ? 'verified' : 'unverified',
     };
 
     const post = await Post.create(postData);

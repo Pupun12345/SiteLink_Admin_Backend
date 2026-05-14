@@ -85,7 +85,9 @@ exports.register = async (req, res) => {
       otp,
       otpExpire,
       otpAttempts: 0,
+      isPhoneVerified: false,
       isVerified: false,
+      isPhoneVerified: false,
     };
 
     // Add email if provided
@@ -204,7 +206,7 @@ exports.verifyOtp = async (req, res, next) => {
     }
 
     // Check if user is already verified
-    if (user.isVerified) {
+    if (user.isPhoneVerified) {
       return res.status(400).json({
         success: false,
         message: 'Account is already verified',
@@ -246,7 +248,7 @@ exports.verifyOtp = async (req, res, next) => {
     }
 
     // Verify user and clear OTP fields
-    user.isVerified = true;
+    user.isPhoneVerified = true;
     user.otp = undefined;
     user.otpExpire = undefined;
     user.otpAttempts = 0;
@@ -291,21 +293,12 @@ exports.login = async (req, res, next) => {
     }
 
     // Check if user is verified by OTP
-    if (!user.isVerified) {
+    if (!user.isPhoneVerified) {
       return res.status(403).json({
         success: false,
         message: 'Please verify your account with OTP before logging in',
       });
     }
-
-    // Worker accounts doesnot require admin document verification
-    // if (user.userType === 'worker' || user.verificationStatus !== 'verified') {
-    //   return res.status(403).json({
-    //     success: false,
-    //     message: 'Worker account pending admin verification',
-    //     verificationStatus: user.verificationStatus,
-    //   });
-    // }
 
     // Check if password matches
     const isMatch = await user.comparePassword(password);
@@ -427,7 +420,7 @@ exports.resendOtp = async (req, res, next) => {
       });
     }
 
-    if (user.isVerified) {
+    if (user.isPhoneVerified) {
       return res.status(400).json({
         success: false,
         message: 'Account is already verified',

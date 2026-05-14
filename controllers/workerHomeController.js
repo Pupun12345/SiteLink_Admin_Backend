@@ -12,7 +12,7 @@ exports.workerData = async (req, res) => {
             })
         }
 
-        const worker = await User.findById(workerId).select('name profileImage isVerified createdAt');
+        const worker = await User.findById(workerId).select('name profileImage verificationStatus createdAt');
 
         if (!worker) {
             return res.status(404).json({
@@ -26,7 +26,7 @@ exports.workerData = async (req, res) => {
             data: {
                 name: worker.name,
                 profileImage: worker.profileImage,
-                isVerified: worker.isVerified,
+                isVerified: worker.verificationStatus === 'verified',
                 joinedAt: worker.createdAt,
             }
         })

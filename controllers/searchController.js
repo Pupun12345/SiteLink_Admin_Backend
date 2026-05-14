@@ -121,7 +121,7 @@ exports.searchVendors = async (req, res) => {
 
     // Verified filter
     if (isVerified !== undefined) {
-      filter.isVerified = isVerified === 'true';
+      filter.verificationStatus = isVerified === 'true' ? 'verified' : 'pending';
     }
 
     // General search - search by name, company name, owner name
@@ -375,7 +375,7 @@ exports.globalSearch = async (req, res) => {
         { city: searchRegex },
       ],
     })
-      .select('name companyName ownerName city projectTypes isVerified profileImage companyLogo')
+      .select('name companyName ownerName city projectTypes verificationStatus profileImage companyLogo')
       .limit(Number(limit));
 
     // Search jobs

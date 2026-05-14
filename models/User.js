@@ -68,6 +68,52 @@ const userSchema = new mongoose.Schema({
     default:null,
   },
   // Worker-specific fields
+  dateOfBirth: {
+    type: Date,
+    default: null,
+  },
+  gender: {
+    type: String,
+    enum: ['Male', 'Female', 'Other'],
+    default: null,
+  },
+  primarySkill: {
+    type: String,
+    default: null,
+  },
+  experienceDescription: {
+    type: String,
+    default: null,
+  },
+  workState: {
+    type: String,
+    default: null,
+  },
+  willingtoRelocate: {
+    type: Boolean,
+    default: false,
+  },
+  salaryType: {
+    type: String,
+    enum: ['Monthly', 'Daily', 'Hourly'],
+    default: null,
+  },
+  salary: {
+    type: Number,
+    default: null,
+  },
+  workSamplesPhoto: {
+    type: [String],
+    default: [],
+  },
+  experienceCertificate: {
+    type: String,
+    default: null,
+  },
+  governmentID: {
+    type: String,
+    default: null,
+  },
   age: {
     type: Number,
     min: [18, 'Age must be at least 18'],
@@ -108,6 +154,14 @@ const userSchema = new mongoose.Schema({
    default:[],
   },
   // Vendor/Contractor-specific fields
+  designation: {
+    type: String,
+    default: null,
+  },
+  workArea: {
+    type: String,
+    default: null,
+  },
   companyLogo: {
     type: String,
     default: null,
@@ -152,6 +206,10 @@ const userSchema = new mongoose.Schema({
     type: [String],
     enum: ['Residential Building', 'Commercial Building', 'Industrial Project', 'Infrastructure', 'Renovation', 'Interior Design'],
     default: [],
+  },
+  isPhoneVerified: {
+    type: Boolean,
+    default: false,
   },
   isVerified: {
     type: Boolean,

@@ -31,7 +31,7 @@ exports.getWorkerDetails = async (req, res) => {
     }
 
     const worker = await User.findById(id).select(
-      'name age phone experience city dailyRate profileImage aadhaarFrontImage aadhaarBackImage medicalCertificate certificates verificationStatus isVerified skills userType adminRating adminRatingComment ratedAt'
+      'name age phone experience city dailyRate profileImage aadhaarFrontImage aadhaarBackImage medicalCertificate certificates verificationStatus verificationStatus skills userType adminRating adminRatingComment ratedAt'
     );
 
     if (!worker || worker.userType !== 'worker') {
@@ -378,7 +378,7 @@ exports.getVendorDetails = async (req, res) => {
     }
 
     const vendor = await User.findById(id).select(
-      'companyName ownerName phone email city gstNumber panNumber licenseNumber panCardImage companyLogo verificationStatus isVerified projectTypes userType adminRating adminRatingComment ratedAt whatsappNumber website'
+      'companyName ownerName phone email city gstNumber panNumber licenseNumber panCardImage companyLogo verificationStatus verificationStatus projectTypes userType adminRating adminRatingComment ratedAt whatsappNumber website'
     );
 
     if (!vendor || vendor.userType !== 'vendor') {
@@ -550,7 +550,7 @@ exports.getAllUsers = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const users = await User.find(query)
-      .select('name email phone userType verificationStatus isVerified createdAt profileImage companyName ownerName city role experience adminRating')
+      .select('name email phone userType verificationStatus verificationStatus createdAt profileImage companyName ownerName city role experience adminRating')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -599,7 +599,7 @@ exports.getUserDetails = async (req, res) => {
     }
 
     const user = await User.findById(id).select(
-      'name email phone userType verificationStatus isVerified createdAt profileImage companyName ownerName city role experience age dailyRate aadhaarFrontImage aadhaarBackImage medicalCertificate certificates skills gstNumber panNumber licenseNumber panCardImage companyLogo projectTypes adminRating adminRatingComment ratedAt'
+      'name email phone userType verificationStatus verificationStatus createdAt profileImage companyName ownerName city role experience age dailyRate aadhaarFrontImage aadhaarBackImage medicalCertificate certificates skills gstNumber panNumber licenseNumber panCardImage companyLogo projectTypes adminRating adminRatingComment ratedAt'
     );
 
     if (!user) {
@@ -622,7 +622,7 @@ exports.getUserDetails = async (req, res) => {
       city: user.city,
       role: user.role || (user.userType === 'vendor' ? 'Vendor' : 'Worker'),
       experience: user.experience,
-      verified: user.isVerified,
+      verified: user.verificationStatus === 'verified',
       twoFactor: false,
       lastPasswordChange: 'Unknown',
       accountStatus: user.verificationStatus.toUpperCase(),
