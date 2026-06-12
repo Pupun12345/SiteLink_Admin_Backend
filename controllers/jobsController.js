@@ -1,6 +1,9 @@
 const Job = require('../models/job');
 const User = require('../models/User');
 const Application = require('../models/Application');
+const mongoose = require("mongoose");
+
+
 
 // @desc    Get all jobs
 // @route   GET /api/jobs
@@ -47,77 +50,139 @@ exports.getJobs = async (req, res) => {
       data: jobsWithCounts,
     });
   } catch (error) {
+    console.error("GET JOB ERROR:", error);
+
     res.status(500).json({
       success: false,
-      message: 'Server Error',
-      error: error.message,
+      message: error.message,
     });
   }
 };
+
 
 // @desc    Get single job by ID with applicants
 // @route   GET /api/jobs/:id
 // @access  Public
 exports.getJobById = async (req, res) => {
   try {
-    const job = await Job.findById(req.params.id).populate('postedBy', 'name companyName');
+    // Validate MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Job ID",
+      });
+    }
+
+    // Get job details
+    const job = await Job.findById(req.params.id)
+      .populate("postedBy", "name companyName");
 
     if (!job) {
       return res.status(404).json({
         success: false,
-        message: 'Job not found',
+        message: "Job not found",
       });
     }
 
-    const applications = await Application.find({ job: req.params.id })
-      .populate('applicant', 'name profileImage userType verificationStatus city dailyRate experience skills phone email')
+    // Get applications for this job
+    const applications = await Application.find({
+      job: req.params.id,
+    })
+      .populate(
+        "applicant",
+        "name profileImage userType verificationStatus city dailyRate salary experience skills phone email primarySkill"
+      )
       .sort({ createdAt: -1 })
       .limit(10);
 
     // Transform applications data
-    const transformedApplicants = applications.map((application) => {
-      const applicant = application.applicant;
-      const timeApplied = application.createdAt;
+    const transformedApplicants = applications
+      .filter((application) => application.applicant) // avoid null applicants
+      .map((application) => {
+        const applicant = application.applicant;
+        const timeApplied = application.createdAt;
 
-      return {
-        id: application._id,
-        applicantId: applicant._id,
-        name: applicant.name,
-        role: applicant.primarySkill || (applicant.skills && applicant.skills.length > 0 ? applicant.skills[0].skillName : 'Worker'),
-        status: application.status,
-        applied: timeApplied,
-        avatar: applicant.profileImage || `https://ui-avatars.io/api/?name=${encodeURIComponent(applicant.name)}&background=random`,
-        experience: applicant.experience || 'Not specified',
-        location: applicant.city || 'Not specified',
-        skills: applicant.skills ? applicant.skills.map(s => s.skillName) : [],
-        phone: applicant.phone,
-        email: applicant.email,
-        dailyRate: applicant.dailyRate || applicant.salary,
-        coverLetter: application.coverLetter,
-        applicationExperience: application.experience
-      };
-    });
+        return {
+          id: application._id,
+          applicantId: applicant._id,
+          name: applicant.name,
 
-    const actualApplicationsCount = await Application.countDocuments({ job: req.params.id });
+          role:
+            applicant.primarySkill ||
+            (
+              applicant.skills &&
+              applicant.skills.length > 0
+            )
+              ? (
+                  applicant.primarySkill ||
+                  applicant.skills[0]?.skillName ||
+                  "Worker"
+                )
+              : "Worker",
 
+          status: application.status,
+          applied: timeApplied,
+
+          avatar:
+            applicant.profileImage ||
+            `https://ui-avatars.io/api/?name=${encodeURIComponent(
+              applicant.name
+            )}&background=random`,
+
+          experience: applicant.experience || "Not specified",
+
+          location: applicant.city || "Not specified",
+
+          skills: applicant.skills
+            ? applicant.skills.map((skill) =>
+                typeof skill === "object"
+                  ? skill.skillName
+                  : skill
+              )
+            : [],
+
+          phone: applicant.phone,
+          email: applicant.email,
+
+          dailyRate:
+            applicant.dailyRate ||
+            applicant.salary ||
+            null,
+
+          coverLetter: application.coverLetter,
+
+          applicationExperience:
+            application.experience,
+        };
+      });
+
+    // Count all applications
+    const actualApplicationsCount =
+      await Application.countDocuments({
+        job: req.params.id,
+      });
+
+    // Preserve existing response structure
     const jobData = {
       ...job.toJSON(),
       applicants: transformedApplicants,
-      applicationsCount: actualApplicationsCount
+      applicationsCount: actualApplicationsCount,
     };
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: jobData,
     });
   } catch (error) {
-    res.status(500).json({
+    console.error("GET JOB ERROR:", error);
+
+    return res.status(500).json({
       success: false,
-      message: 'Invalid Job ID',
-      error: error.message,
+      message: error.message || "Failed to fetch job",
     });
   }
 };
+
 
 // @desc    Create a new job
 // @route   POST /api/jobs
