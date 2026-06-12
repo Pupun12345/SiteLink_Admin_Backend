@@ -7,3 +7,11 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 uploads/
+
+#Extra Files
+checkAdmin.js
+createAdminProfile.js
+fix-email-index.js
+fixAdminUser.js
+resetAdminPassword.js
+testLogin.js
