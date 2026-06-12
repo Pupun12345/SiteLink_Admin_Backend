@@ -1,15 +1,16 @@
 const express = require('express');
 const { body } = require('express-validator');
 const upload = require('../middleware/upload');
-const skillsReference = require('../models/SkillReference');
+const Skill = require('../models/Skill');
 const {
   register,
+  registerVendorAndWorker,
   login,
   adminLogin,
   verifyOtp,
   resendOtp,
-  forgotPassword,      
-  verifyResetOtp,      
+  forgotPassword,
+  verifyResetOtp,
   resetPassword,
   logout,
 } = require('../controllers/authController');
@@ -59,23 +60,24 @@ const registerValidation = [
     .withMessage('Invalid experience level'),
   body('skills')
     .optional()
-    .custom((value) => {
-      const validSkills = require('../models/SkillReference');
+    .custom(async (value) => {
       let skillsArray = [];
-      
+
       if (typeof value === 'string') {
-        skillsArray = value.split(',').map(id=>parseInt(id.trim()));
+        skillsArray = value.split(',').map(id => parseInt(id.trim()));
       } else if (Array.isArray(value)) {
         skillsArray = value.map(id => parseInt(id));
       } else {
-        throw new Error('Skills must be coma-separated string of IDs or array');
+        throw new Error('Skills must be comma-separated string of IDs or array');
       }
-      
-      const validIds = skillsReference.map(s => s.id);
+
+      // Fetch valid skill IDs from database
+      const validSkills = await Skill.find({ id: { $in: skillsArray } });
+      const validIds = validSkills.map(s => s.id);
       const invalidIds = skillsArray.filter(id => !validIds.includes(id));
-      
-      if (invalidIds.length>0){
-        throw new Error (`Invalid skill IDs: ${invalidIds.join(',')}`);
+
+      if (invalidIds.length > 0) {
+        throw new Error(`Invalid skill IDs: ${invalidIds.join(',')}`);
       }
       return true;
     }),
@@ -108,7 +110,7 @@ const registerValidation = [
     .custom((value) => {
       const validProjectTypes = ['Residential Building', 'Commercial Building', 'Industrial Project', 'Infrastructure', 'Renovation', 'Interior Design'];
       let projectTypesArray = [];
-      
+
       if (typeof value === 'string') {
         projectTypesArray = value.split(',').map(s => s.trim());
       } else if (Array.isArray(value)) {
@@ -116,12 +118,12 @@ const registerValidation = [
       } else {
         throw new Error('Project types must be a string or array');
       }
-      
+
       const invalidTypes = projectTypesArray.filter(type => !validProjectTypes.includes(type));
       if (invalidTypes.length > 0) {
         throw new Error(`Invalid project types: ${invalidTypes.join(', ')}`);
       }
-      
+
       return true;
     }),
 ];
@@ -187,7 +189,7 @@ const resetPasswordValidation = [
 ];
 
 // Public routes
-router.post('/register', 
+router.post('/register',
   upload.fields([
     { name: 'profileImage', maxCount: 1 },
     { name: 'companyLogo', maxCount: 1 },
@@ -195,10 +197,11 @@ router.post('/register',
     { name: 'aadhaarBackImage', maxCount: 1 },
     { name: 'panCardImage', maxCount: 1 },
     { name: 'medicalCertificate', maxCount: 1 }
-  ]), 
-  registerValidation, 
+  ]),
+  registerValidation,
   register
 );
+
 router.post('/verify-otp', verifyOtpValidation, verifyOtp);
 router.post('/resend-otp', resendOtpValidation, resendOtp);
 router.post('/login', loginValidation, login);

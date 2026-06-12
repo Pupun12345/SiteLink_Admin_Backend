@@ -4,7 +4,6 @@ const bcrypt = require('bcryptjs');
 const userSchema = new mongoose.Schema({
   name: {
     type: String,
-    required: [true, 'Please provide a name'],
     trim: true,
   },
   phone: {
@@ -30,24 +29,24 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: [true, 'Please provide a password'],
     minlength: 8,
-    select: false, // Don't return password by default in queries
+    select: false,
   },
   role: {
     type: String,
-    enum: ['user', 'vendor', 'worker', 'admin'],
-    default: 'user',
   },
   userType: {
     type: String,
     enum: ['customer', 'vendor', 'worker','admin'],
-    required: [true, 'Please specify user type'],
-    default: 'customer',
+    required: [true, 'Please specify user type']
   },
   profileImage: {
     type: String,
     default: null,
+  },
+  isProfileCreated:{
+    type: Boolean,
+    default: false,
   },
   // Only in worker fields
   aadhaarFrontImage: {
@@ -95,7 +94,7 @@ const userSchema = new mongoose.Schema({
   },
   salaryType: {
     type: String,
-    enum: ['Monthly', 'Daily', 'Hourly'],
+    enum: ['daily', 'monthly', 'hourly', 'project-based'],
     default: null,
   },
   salary: {
@@ -141,7 +140,6 @@ const userSchema = new mongoose.Schema({
   },
   experience: {
     type: String,
-    enum: ['0-1 Year', '1-3 Years', '3-5 Years', '5+ Years'],
     default: null,
   },
   skills: {
@@ -164,11 +162,6 @@ const userSchema = new mongoose.Schema({
   },
   companyLogo: {
     type: String,
-    default: null,
-  },
-  ownerName: {
-    type: String,
-    trim: true,
     default: null,
   },
   companyName: {
@@ -211,13 +204,17 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  location:{
+    type:String,
+    default:null,
+  },
   isVerified: {
     type: Boolean,
     default: false,
   },
   verificationStatus: {
     type: String,
-    enum: ['pending', 'verified', 'rejected'],
+    enum: ['pending', 'verified', 'rejected', 'suspended', 'banned'],
     default: 'pending',
   },
   verificationRejectedReason: {
@@ -295,8 +292,10 @@ userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) {
     next();
   }
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
+  if (this.password) {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+  }
 });
 
 // Method to compare password

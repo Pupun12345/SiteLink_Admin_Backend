@@ -16,15 +16,6 @@ const applicationSchema = new mongoose.Schema({
     enum: ['pending', 'shortlisted', 'rejected', 'hired'],
     default: 'pending',
   },
-  proposedRate: {
-    type: Number,
-    min: 0,
-  },
-  availability: {
-    type: String,
-    enum: ['immediate', 'within_week', 'within_month', 'flexible'],
-    default: 'flexible',
-  },
   coverLetter: {
     type: String,
     maxlength: 1000,

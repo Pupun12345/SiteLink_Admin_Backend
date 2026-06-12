@@ -65,7 +65,6 @@ exports.protect = async (req, res, next) => {
   }
 };
 
-
 exports.adminOnly = (req, res, next) => {
   // Allow both super admin admin users (with permissions object)
   if (req.user && (req.user.userType === 'admin' || req.user.permissions)) {
@@ -77,6 +76,7 @@ exports.adminOnly = (req, res, next) => {
     });
   }
 }
+
 // Authorize specific roles
 exports.authorize = (...roles) => {
   return (req, res, next) => {

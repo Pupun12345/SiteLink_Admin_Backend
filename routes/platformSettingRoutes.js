@@ -5,6 +5,7 @@ const {
   verificationRulesSettings,
   languageSettings,
   getSettings,
+  addSkill,
 } = require('../controllers/platformSettingController');
 const { protect } = require('../middleware/auth');
 
@@ -31,5 +32,6 @@ router.put('/plans', editPlanAmount);
 router.put('/notifications', notificationSettings);
 router.put('/verification-rules', verificationRulesSettings);
 router.put('/language', languageSettings);
+router.post('/skills', addSkill);
 
 module.exports = router;

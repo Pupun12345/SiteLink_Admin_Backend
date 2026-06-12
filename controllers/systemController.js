@@ -159,11 +159,14 @@ const getCpuUsage = () => {
 // Function to get disk usage
 const getDiskUsage = async () => {
   try {
-    const stats = await fs.promises.statSync(process.cwd());
+    // Use the async fs.promises.stat to avoid calling non-existent statSync on fs.promises
+    const stats = await fs.promises.stat(process.cwd());
+    // NOTE: Node's stat does not provide total disk size cross-platform. Keeping existing
+    // heuristic using memory as a proxy to avoid introducing a native dependency here.
     const totalSpace = os.totalmem(); // Using memory as proxy
     const freeSpace = os.freemem();
     const usedSpace = totalSpace - freeSpace;
-    
+
     return Math.round((usedSpace / totalSpace) * 100);
   } catch (error) {
     console.error('Error getting disk usage:', error);

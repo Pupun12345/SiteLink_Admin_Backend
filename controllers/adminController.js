@@ -1,5 +1,7 @@
 const User = require('../models/User');
 const PlatformSettings = require('../models/PlatformSettings');
+const jobPost = require('../models/job');
+const Post = require('../models/Post');
 
 // Get list of workers pending document verification
 exports.getPendingWorkers = async (req, res) => {
@@ -19,6 +21,7 @@ exports.getPendingWorkers = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
 
 // Get worker details (for verification screen)
 exports.getWorkerDetails = async (req, res) => {
@@ -42,8 +45,8 @@ exports.getWorkerDetails = async (req, res) => {
     const platformSettings = await PlatformSettings.getOrCreateSettings();
     const requiredDocuments = platformSettings.verificationRules.worker;
 
-    return res.json({ 
-      success: true, 
+    return res.json({
+      success: true,
       data: {
         ...worker.toObject(),
         requiredDocuments
@@ -63,7 +66,7 @@ exports.autoApprove = async (req, res) => {
     if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ success: false, message: 'Invalid user ID format' });
     }
-    
+
     const user = await User.findById(id);
 
     if (!user) {
@@ -269,7 +272,7 @@ exports.addSkillsToWorker = async (req, res) => {
     // Merge new skills with existing ones, avoiding duplicates
     const existingSkillIds = user.skills.map(s => s.skillId);
     const newSkills = skills.filter(skill => !existingSkillIds.includes(skill.skillId));
-    
+
     user.skills = [...user.skills, ...newSkills];
     await user.save({ validateModifiedOnly: true });
 
@@ -353,7 +356,7 @@ exports.getVendors = async (req, res) => {
     }
 
     const vendors = await User.find(query).select(
-      'companyName ownerName phone city companyLogo verificationStatus createdAt email gstNumber adminRating projectTypes panCardImage whatsappNumber website'
+      'companyName name phone city companyLogo verificationStatus createdAt email gstNumber adminRating profileImage whatsappNumber website role workArea workState'
     );
 
     return res.json({
@@ -378,7 +381,7 @@ exports.getVendorDetails = async (req, res) => {
     }
 
     const vendor = await User.findById(id).select(
-      'companyName ownerName phone email city gstNumber panNumber licenseNumber panCardImage companyLogo verificationStatus verificationStatus projectTypes userType adminRating adminRatingComment ratedAt whatsappNumber website'
+      'companyName name phone email city gstNumber companyLogo verificationStatus verificationStatus userType adminRating adminRatingComment ratedAt whatsappNumber website role workArea workState profileImage'
     );
 
     if (!vendor || vendor.userType !== 'vendor') {
@@ -389,8 +392,8 @@ exports.getVendorDetails = async (req, res) => {
     const platformSettings = await PlatformSettings.getOrCreateSettings();
     const requiredDocuments = platformSettings.verificationRules.vendor;
 
-    return res.json({ 
-      success: true, 
+    return res.json({
+      success: true,
       data: {
         ...vendor.toObject(),
         requiredDocuments
@@ -537,44 +540,84 @@ exports.getAllUsers = async (req, res) => {
   try {
     const { userType, status, page = 1, limit = 10 } = req.query;
 
-    const query = {};
+    const query = { isProfileCreated: true };
 
-    if (userType && userType !== 'all') {
+    if (userType && userType !== "all") {
       query.userType = userType;
     }
 
-    if (status && status !== 'all') {
+    if (status && status !== "all") {
       query.verificationStatus = status;
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const users = await User.find(query)
-      .select('name email phone userType verificationStatus verificationStatus createdAt profileImage companyName ownerName city role experience adminRating')
+      .select(`
+        name email phone userType verificationStatus createdAt
+        profileImage companyName companyLogo city workState
+        role website experience adminRating
+        workArea gstNumber whatsappNumber primarySkill
+        skills willingtoRelocate salaryType salary dateOfBirth gender
+      `)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
     const total = await User.countDocuments(query);
 
-    const transformedUsers = users.map(user => ({
-      _id: user._id,
-      name: user.userType === 'vendor' ? user.companyName : user.name,
-      email: user.email || '',
-      type: user.userType.charAt(0).toUpperCase() + user.userType.slice(1),
-      status: user.verificationStatus.charAt(0).toUpperCase() + user.verificationStatus.slice(1),
-      join: user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
-      plan: 'Basic',
-      lastActive: 'Recently',
-      profileImage: user.profileImage || (user.userType === 'vendor' ? user.companyLogo : null),
-      phone: user.phone,
-      city: user.city,
-      role: user.role || (user.userType === 'vendor' ? 'Vendor' : 'Worker'),
-      experience: user.experience,
-      adminRating: user.adminRating || null,
-    }));
+    const transformedUsers = users.map((user) => {
+      const commonFields = {
+        _id: user._id,
+        profileImage: user.profileImage,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        userType: user.userType,
+        city: user.city,
+        workState: user.workState,
+        adminRating: user.adminRating,
+        verificationStatus:
+          user.verificationStatus?.charAt(0).toUpperCase() +
+          user.verificationStatus?.slice(1),
+        join: user.createdAt
+          ? new Date(user.createdAt).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          })
+          : "",
+      };
 
-    return res.json({
+      if (user.userType === "vendor") {
+        return {
+          ...commonFields,
+          companyLogo: user.companyLogo,
+          companyName: user.companyName,
+          designation: user.role,
+          workArea: user.workArea,
+          website: user.website,
+          gstNumber: user.gstNumber,
+          whatsappNumber: user.whatsappNumber,
+        };
+      }
+
+      return {
+        ...commonFields,
+        role: user.role,
+        primarySkill: user.primarySkill,
+        additionalSkills: user.skills,
+        willingtoRelocate: user.willingtoRelocate,
+        experience: user.experience,
+        salaryType: user.salaryType,
+        salary: user.salary,
+        location: user.location,
+        gender: user.gender,
+        dateOfBirth: user.dateOfBirth
+      };
+    });
+
+    return res.status(200).json({
       success: true,
       count: transformedUsers.length,
       total,
@@ -583,8 +626,110 @@ exports.getAllUsers = async (req, res) => {
       data: transformedUsers,
     });
   } catch (error) {
-    console.error('getAllUsers error:', error);
-    return res.status(500).json({ success: false, message: 'Server error' });
+    console.error("getAllUsers error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+// GET ALL VENDORS AND WORKERS
+exports.getAllWorkersAndVendors = async (req, res) => {
+  try {
+    const { userType, status, page = 1, limit = 10 } = req.query;
+
+    const query = {};
+
+    if (userType && userType !== "all") {
+      query.userType = userType;
+    }
+
+    if (status && status !== "all") {
+      query.verificationStatus = status;
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const users = await User.find(query)
+      .select(`
+        name email phone userType verificationStatus createdAt
+        profileImage companyName companyLogo city workState
+        role website experience adminRating
+        workArea gstNumber whatsappNumber primarySkill
+        skills willingtoRelocate salaryType salary
+      `)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await User.countDocuments(query);
+
+    const transformedUsers = users.map((user) => {
+      const commonFields = {
+        _id: user._id,
+        profileImage: user.profileImage,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        userType: user.userType,
+        city: user.city,
+        workState: user.workState,
+        adminRating: user.adminRating,
+        isVerified: user.isVerified,
+        verificationRejectedReason: user.verificationRejectedReason,
+        verificationStatus:
+          user.verificationStatus?.charAt(0).toUpperCase() +
+          user.verificationStatus?.slice(1),
+        join: user.createdAt
+          ? new Date(user.createdAt).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          })
+          : "",
+      };
+
+      if (user.userType === "vendor") {
+        return {
+          ...commonFields,
+          companyLogo: user.companyLogo,
+          companyName: user.companyName,
+          designation: user.role,
+          workArea: user.workArea,
+          website: user.website,
+          gstNumber: user.gstNumber,
+          whatsappNumber: user.whatsappNumber,
+        };
+      }
+
+      return {
+        ...commonFields,
+        role: user.role,
+        primarySkill: user.primarySkill,
+        additionalSkills: user.skills,
+        willingtoRelocate: user.willingtoRelocate,
+        experience: user.experience,
+        salaryType: user.salaryType,
+        salary: user.salary,
+        location: user.location
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: transformedUsers.length,
+      total,
+      page: parseInt(page),
+      totalPages: Math.ceil(total / parseInt(limit)),
+      data: transformedUsers,
+    });
+  } catch (error) {
+    console.error("getAllUsers error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 };
 
@@ -593,68 +738,209 @@ exports.getUserDetails = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validate ObjectId format
+    const regularUser = await User.findById(id);
+    let jobs;
+    let postedBy = id;
+
+    if (regularUser && regularUser.userType == "vendor") {
+      jobs = await jobPost.find({ postedBy });
+    }
+
+    if (!regularUser) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const Posts = await Post.find({ postedBy: regularUser._id }).sort({ createdAt: -1 });
+
+    const user = regularUser.userType === 'worker'
+      ? {
+        id: regularUser._id,
+        name: regularUser.name,
+        email: regularUser.email,
+        role: regularUser.role,
+        phone: regularUser.phone,
+        profileImage: regularUser.profileImage,
+        primarySkill: regularUser.primarySkill,
+        skills: regularUser.skills,
+        willingtoRelocate: regularUser.willingtoRelocate,
+        posts: Posts,
+        workCity: regularUser.city,
+        workState: regularUser.workState,
+        userType: regularUser.userType,
+        createdAt: regularUser.createdAt,
+        location: regularUser.location,
+        salaryType: regularUser.salaryType,
+        salary: regularUser.salary,
+        experience: regularUser.experience,
+        gender:regularUser.gender,
+        dateOfBirth:regularUser.dateOfBirth,
+        age: regularUser.age,
+        governmentID: regularUser.governmentID,
+        workSamplesPhoto: regularUser.workSamplesPhoto,
+        certificates: regularUser.certificates,
+        verificationStatus: regularUser.verificationStatus,
+        experienceDescription: regularUser.experienceDescription,
+        documents: [
+          {
+            name: 'Aadhaar Front',
+            type: 'NATIONAL ID PROOF',
+            url: regularUser.aadhaarFrontImage,
+          },
+          {
+            name: 'Aadhaar Back',
+            type: 'ID BACK',
+            url: regularUser.aadhaarBackImage,
+          },
+          {
+            name: 'Medical Certificate',
+            type: 'HEALTH CLEARANCE',
+            url: regularUser.medicalCertificate,
+          },
+          {
+            name: 'Government ID',
+            type: 'IDENTITY PROOF',
+            url: regularUser.governmentID,
+          },
+          {
+            name: 'Experience Certificate',
+            type: 'EXPERIENCE PROOF',
+            url: regularUser.experienceCertificate,
+          },
+        ],
+        workPhotos: Posts,
+        contactInfo: {
+          email: regularUser.email,
+          phone: regularUser.phone,
+        },
+        adminRating: regularUser.adminRating,
+        adminRatingComment: regularUser.adminRatingComment,
+        ratedAt: regularUser.ratedAt ? new Date(regularUser.ratedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null,
+
+      }
+      : {
+        id: regularUser._id,
+        name: regularUser.name,
+        email: regularUser.email,
+        role: regularUser.role,
+        profileImage: regularUser.profileImage,
+        userType: regularUser.userType,
+        createdAt: regularUser.createdAt,
+        workCity: regularUser.city,
+        workState: regularUser.workState,
+        phone: regularUser.phone,
+        gstNumber: regularUser.gstNumber,
+        companyName: regularUser.companyName,
+        companyLogo: regularUser.companyLogo,
+        designation: regularUser.role,
+        workArea: regularUser.workArea,
+        whatsappNumber: regularUser.whatsappNumber,
+        website: regularUser.website,
+        verificationStatus: regularUser.verificationStatus,
+        adminRating: regularUser.adminRating,
+        adminRatingComment: regularUser.adminRatingComment,
+        ratedAt: regularUser.ratedAt,
+        jobPosts: jobs
+      };
+
+    return res.json({
+      success: true,
+      data: user,
+    });
+
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+// Update user details (admin only)
+exports.updateUserDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
     if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ success: false, message: 'Invalid user ID format' });
     }
 
-    const user = await User.findById(id).select(
-      'name email phone userType verificationStatus verificationStatus createdAt profileImage companyName ownerName city role experience age dailyRate aadhaarFrontImage aadhaarBackImage medicalCertificate certificates skills gstNumber panNumber licenseNumber panCardImage companyLogo projectTypes adminRating adminRatingComment ratedAt'
-    );
-
+    const user = await User.findById(id);
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    const transformedUser = {
-      _id: user._id,
-      name: user.userType === 'vendor' ? user.companyName : user.name,
-      email: user.email || '',
-      phone: user.phone,
-      userType: user.userType,
-      type: user.userType.charAt(0).toUpperCase() + user.userType.slice(1),
-      status: user.verificationStatus.charAt(0).toUpperCase() + user.verificationStatus.slice(1),
-      join: user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
-      createdAt: user.createdAt,
-      plan: 'Basic',
-      lastActive: 'Recently',
-      avatar: user.profileImage || (user.userType === 'vendor' ? user.companyLogo : null),
-      city: user.city,
-      role: user.role || (user.userType === 'vendor' ? 'Vendor' : 'Worker'),
-      experience: user.experience,
-      verified: user.verificationStatus === 'verified',
-      twoFactor: false,
-      lastPasswordChange: 'Unknown',
-      accountStatus: user.verificationStatus.toUpperCase(),
-      department: user.userType === 'vendor' ? 'Vendor' : 'Worker',
-      location: user.city ? `${user.city}, India` : 'Unknown',
-      employeeId: `SL-${user._id.toString().slice(-4)}`,
-      adminRating: user.adminRating || null,
-      adminRatingComment: user.adminRatingComment || null,
-      ratedAt: user.ratedAt || null,
-      ...(user.userType === 'worker' && {
-        age: user.age,
-        dailyRate: user.dailyRate,
-        aadhaarFrontImage: user.aadhaarFrontImage,
-        aadhaarBackImage: user.aadhaarBackImage,
-        medicalCertificate: user.medicalCertificate,
-        certificates: user.certificates,
-        skills: user.skills
-      }),
-      ...(user.userType === 'vendor' && {
-        ownerName: user.ownerName,
-        gstNumber: user.gstNumber,
-        panNumber: user.panNumber,
-        licenseNumber: user.licenseNumber,
-        panCardImage: user.panCardImage,
-        companyLogo: user.companyLogo,
-        projectTypes: user.projectTypes,
-      })
-    };
+    // Update allowed fields based on user type
+    let allowedFields = ['name', 'email', 'phone', 'workCity', 'workState', 'location', 'role', 'primarySkill',
+      'experience', 'salary', 'salaryType', 'willingtoRelocate'];
 
-    return res.json({ success: true, data: transformedUser });
+    if (user.userType === 'vendor') {
+      allowedFields.push('companyName', 'gstNumber', 'workArea', 'whatsappNumber', 'website');
+    }
+
+    allowedFields.forEach(field => {
+      if (updates[field] !== undefined && updates[field] !== null) {
+        // Special handling for willingtoRelocate boolean
+        if (field === 'willingtoRelocate') {
+          user[field] = updates[field] === true || updates[field] === 'true';
+        } else {
+          user[field] = updates[field];
+        }
+      }
+    });
+
+    await user.save({ validateModifiedOnly: true });
+
+    return res.json({
+      success: true,
+      message: 'User details updated successfully',
+      data: user,
+    });
   } catch (error) {
-    console.error('getUserDetails error:', error);
+    console.error('updateUserDetails error:', error);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// Delete user (admin only)
+exports.deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ success: false, message: 'Invalid user ID format' });
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Delete user's uploaded files
+    const filesToDelete = [
+      user.profileImage,
+      user.aadhaarFrontImage,
+      user.aadhaarBackImage,
+      user.medicalCertificate,
+      user.governmentID,
+      user.experienceCertificate,
+      user.companyLogo,
+      user.panCardImage,
+      ...(user.workSamplesPhoto || [])
+    ].filter(Boolean);
+
+    filesToDelete.forEach(filePath => {
+      const fs = require('fs');
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    });
+
+    await User.findByIdAndDelete(id);
+
+    return res.json({
+      success: true,
+      message: `${user.userType.charAt(0).toUpperCase() + user.userType.slice(1)} deleted successfully`,
+    });
+  } catch (error) {
+    console.error('deleteUser error:', error);
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 };

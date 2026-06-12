@@ -18,10 +18,13 @@ const postSchema = new mongoose.Schema(
         message: 'Maximum 5 images allowed per post',
       },
     },
-    category: {
+    video: {
       type: String,
-      enum: ['work', 'project', 'skill', 'general', 'announcement', 'question', 'discussion', 'achievement', 'help'],
-      default: 'general',
+      default: null,
+    },
+    feeling: {
+      type: String,
+      default: null,
     },
     postedBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -91,10 +94,6 @@ const postSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-    shares: {
-      type: Number,
-      default: 0,
-    },
     isActive: {
       type: Boolean,
       default: true,
@@ -138,5 +137,12 @@ const postSchema = new mongoose.Schema(
 postSchema.index({ postedBy: 1, createdAt: -1 });
 postSchema.index({ posterType: 1, createdAt: -1 });
 postSchema.index({ isActive: 1, createdAt: -1 });
+
+// Add contentType virtual for unified feed
+postSchema.virtual('contentType').get(function() {
+  return 'post';
+});
+
+postSchema.set('toJSON', { virtuals: true });
 
 module.exports = mongoose.model('Post', postSchema);

@@ -1,13 +1,14 @@
-const skillsReference = require('../models/SkillReference');
+const Skill = require('../models/Skill');
 
 // @desc    Get all skills
 // @route   GET /api/skills
 // @access  Public
 exports.getAllSkills = async (req, res) => {
   try {
+    const skills = await Skill.find().sort({ id: 1 });
     res.status(200).json({
       success: true,
-      data: skillsReference,
+      data: skills,
     });
   } catch (error) {
     res.status(500).json({
@@ -23,7 +24,7 @@ exports.getAllSkills = async (req, res) => {
 // @access  Public
 exports.getSkillById = async (req, res) => {
   try {
-    const skill = skillsReference.find(s => s.id === parseInt(req.params.id));
+    const skill = await Skill.findOne({ id: parseInt(req.params.id) });
     
     if (!skill) {
       return res.status(404).json({

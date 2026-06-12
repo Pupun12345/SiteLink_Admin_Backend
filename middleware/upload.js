@@ -25,7 +25,7 @@ const storage = multer.diskStorage({
       cb(null, profileDir);
     } else if (file.fieldname === 'aadhaarFrontImage' || file.fieldname === 'aadhaarBackImage'|| file.fieldname === 'panCardImage') {
       cb(null, documentsDir);
-    } else if (file.fieldname === 'images') {
+    } else if (file.fieldname === 'images' || file.fieldname === 'video') {
       cb(null, postsDir);
     } else {
       cb(null, profileDir);
@@ -48,7 +48,7 @@ const storage = multer.diskStorage({
     else if (file.fieldname === 'panCardImage'){
       prefix = 'pan-card';
     }
-    else if (file.fieldname === 'images'){
+    else if (file.fieldname === 'images' || file.fieldname === 'video'){
       prefix = 'post';
     }
     
@@ -56,25 +56,27 @@ const storage = multer.diskStorage({
   }
 });
 
-// File filter - accept only images
+// File filter - accept images and videos
 const fileFilter = (req, file, cb) => {
-  // Allowed file types
+  if (file.fieldname === 'video') {
+    const allowedVideo = /mp4|mov|avi|mkv|webm/;
+    const extname = allowedVideo.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = /video/.test(file.mimetype);
+    if (mimetype && extname) return cb(null, true);
+    return cb(new Error('Only video files are allowed (mp4, mov, avi, mkv, webm)'));
+  }
   const allowedTypes = /jpeg|jpg|png|gif|webp/;
   const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
   const mimetype = allowedTypes.test(file.mimetype);
-
-  if (mimetype && extname) {
-    return cb(null, true);
-  } else {
-    cb(new Error('Only image files are allowed (jpeg, jpg, png, gif, webp)'));
-  }
+  if (mimetype && extname) return cb(null, true);
+  cb(new Error('Only image files are allowed (jpeg, jpg, png, gif, webp)'));
 };
 
 // Create multer upload instance
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB max file size
+    fileSize: 50 * 1024 * 1024, // 50MB to support videos
   },
   fileFilter: fileFilter,
 });

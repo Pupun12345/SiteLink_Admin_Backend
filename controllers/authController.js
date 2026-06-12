@@ -3,11 +3,11 @@ const PlatformSettings = require('../models/PlatformSettings');
 const { sendTokenResponse, generateToken } = require('../utils/tokenUtils');
 const { generateOTP, getOTPExpiry } = require('../utils/otpUtils');
 const { validationResult } = require('express-validator');
-const skillsReference = require('../models/SkillReference');
+const Skill = require('../models/Skill');
 const BlacklistedToken = require('../models/BlacklistedToken');
 const crypto = require('crypto');
 
-// @desc    Register user
+// @desc    Register Admin
 // @route   POST /api/auth/register
 // @access  Public
 exports.register = async (req, res) => {
@@ -62,7 +62,7 @@ exports.register = async (req, res) => {
     }
 
     // Validate userType
-    const validUserTypes = ['customer', 'vendor', 'worker'];
+    const validUserTypes = ['customer', 'vendor', 'worker','admin'];
     const finalUserType = userType && validUserTypes.includes(userType) ? userType : 'customer';
 
     // Generate OTP
@@ -75,7 +75,7 @@ exports.register = async (req, res) => {
       phone,
       password,
       userType: finalUserType,
-      role: role || 'user',
+      role: role || 'admin',
       profileImage,
       companyLogo,
       aadhaarFrontImage,
@@ -95,64 +95,8 @@ exports.register = async (req, res) => {
       userData.email = req.body.email;
     }
 
-    // Add worker-specific fields if provided
-    if (req.body.city) {
-      userData.city = req.body.city;
-    }
-    if (req.body.dailyRate) {
-      userData.dailyRate = req.body.dailyRate;
-    }
-    if (req.body.aadhaarNumber) {
-      userData.aadhaarNumber = req.body.aadhaarNumber;
-    }
-    if (req.body.experience) {
-      userData.experience = req.body.experience;
-    }
-    if (req.body.skills) {
-      let skillsIds = [];
-
-      if (typeof req.body.skills === 'string') {
-        skillsIds = req.body.skills.split(',').map(id => parseInt(id.trim()));
-      }
-      else if (Array.isArray(req.body.skills)) {
-        skillsIds = req.body.skills.map(id => parseInt(id));
-      }
-
-      userData.skills = skillsIds.map(id => {
-        const skill = skillsReference.find(s => s.id === id);
-        if (skill) {
-          return {
-            skillId: skill.id,
-            skillName: skill.name
-          };
-        }
-      }).filter(Boolean);
-    }
 
 
-    // Add vendor/contractor-specific fields if provided
-    if (req.body.ownerName) {
-      userData.ownerName = req.body.ownerName;
-    }
-    if (req.body.companyName) {
-      userData.companyName = req.body.companyName;
-    }
-    if (req.body.panNumber) {
-      userData.panCardImage = req.body.panNumber;
-    }
-    if (req.body.gstNumber) {
-      userData.gstNumber = req.body.gstNumber;
-    }
-    if (req.body.licenseNumber) {
-      userData.licenseNumber = req.body.licenseNumber;
-    }
-    if (req.body.projectTypes) {
-      if (typeof req.body.projectTypes === 'string') {
-        userData.projectTypes = req.body.projectTypes.split(',').map(type => type.trim());
-      } else if (Array.isArray(req.body.projectTypes)) {
-        userData.projectTypes = req.body.projectTypes;
-      }
-    }
 
     // Create user with OTP (not verified yet)
     const user = await User.create(userData);
@@ -179,6 +123,7 @@ exports.register = async (req, res) => {
     });
   }
 };
+
 
 // @desc    Verify OTP
 // @route   POST /api/auth/verify-otp
@@ -342,7 +287,7 @@ exports.adminLogin = async (req, res, next) => {
 
     const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
 
-    if (!user || user.role !== 'admin') {
+    if (!user || user.role.toLowerCase() !== 'admin') {
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials',

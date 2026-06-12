@@ -1,6 +1,7 @@
 const planDetails = require('../models/PlanDetails');
 const PlatformSettings = require('../models/PlatformSettings');
 const Notification = require('../models/Notification');
+const Skill = require('../models/Skill');
 
 const createAdminNotification = async (title, message, createdBy) => {
     try {
@@ -235,6 +236,7 @@ exports.verificationRulesSettings = async (req, res) => {
 exports.getSettings = async (req, res) => {
     try {
         const settings = await PlatformSettings.getOrCreateSettings();
+        const skills = await Skill.find().sort({ id: 1 });
 
         return res.status(200).json({
             success: true,
@@ -242,6 +244,7 @@ exports.getSettings = async (req, res) => {
                 notifications: settings.notifications,
                 verificationRules: settings.verificationRules,
                 language: settings.language,
+                skills: skills,
                 updatedAt: settings.updatedAt,
                 updatedBy: settings.updatedBy
             }
@@ -255,3 +258,48 @@ exports.getSettings = async (req, res) => {
         });
     }
 }
+
+exports.addSkill = async (req, res) => {
+    try {
+        const { skill } = req.body;
+
+        if (!skill || !skill.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: 'Skill name is required'
+            });
+        }
+
+        const existingSkill = await Skill.findOne({ name: skill.trim() });
+        if (existingSkill) {
+            return res.status(400).json({
+                success: false,
+                message: 'Skill already exists'
+            });
+        }
+
+        const lastSkill = await Skill.findOne().sort({ id: -1 });
+        const newId = lastSkill ? lastSkill.id + 1 : 1;
+
+        const newSkill = await Skill.create({
+            id: newId,
+            name: skill.trim(),
+            createdBy: req.user.id
+        });
+
+        const allSkills = await Skill.find().sort({ id: 1 });
+
+        return res.status(200).json({
+            success: true,
+            message: 'Skill added successfully',
+            skills: allSkills
+        });
+    } catch (error) {
+        console.error('Add skill error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+            error: error.message
+        });
+    }
+};

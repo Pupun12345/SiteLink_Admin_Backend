@@ -6,14 +6,12 @@ const {
   createJob,
   updateJob,
   deleteJob,
-  getCommentsByJob,
-  addComment,
-  updateComment,
-  deleteComment,
-  toggleCommentLike,
-  applyToJob,
   updateApplicationStatus,
   getJobApplications,
+  likeUnlikeJob,
+  addJobComment,
+  getJobComments,
+  deleteJobComment,
 } = require('../controllers/jobsController');
 const { protect } = require('../middleware/auth');
 
@@ -32,30 +30,22 @@ router.put('/:id', protect, updateJob);
 // DELETE job (protected)
 router.delete('/:id', protect, deleteJob);
 
-// Comment routes
-// GET comments for a job
-router.get('/:id/comments', getCommentsByJob);
-
-// POST add comment to job (protected)
-router.post('/:id/comments', protect, addComment);
-
-// PUT update comment (protected)
-router.put('/:jobId/comments/:commentId', protect, updateComment);
-
-// DELETE comment (protected)
-router.delete('/:jobId/comments/:commentId', protect, deleteComment);
-
-// PUT like/unlike comment (protected)
-router.put('/:jobId/comments/:commentId/like', protect, toggleCommentLike);
-
-// Application routes
-// POST apply to job (protected)
-router.post('/:id/apply', protect, applyToJob);
-
 // GET applications for a job (protected)
 router.get('/:id/applications', protect, getJobApplications);
 
 // PUT update application status (protected)
 router.put('/:jobId/applications/:applicationId', protect, updateApplicationStatus);
+
+// PUT like/unlike job (protected)
+router.put('/:jobId/like', protect, likeUnlikeJob);
+
+// POST add comment to job (protected)
+router.post('/:id/comments', protect, addJobComment);
+
+// GET comments for a job
+router.get('/:id/comments', getJobComments);
+
+// DELETE comment from job (protected)
+router.delete('/:jobId/comments/:commentId', protect, deleteJobComment);
 
 module.exports = router;

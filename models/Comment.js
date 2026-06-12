@@ -2,9 +2,9 @@ const mongoose = require('mongoose');
 
 const commentSchema = new mongoose.Schema(
   {
-    jobId: {
+    postId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Job',
+      ref: 'Post',
       required: true,
     },
     userId: {
@@ -61,7 +61,7 @@ const commentSchema = new mongoose.Schema(
   }
 );
 
-commentSchema.index({ jobId: 1, createdAt: -1 });
+commentSchema.index({ postId: 1, createdAt: -1 });
 commentSchema.index({ userId: 1 });
 commentSchema.index({ parentComment: 1 });
 
