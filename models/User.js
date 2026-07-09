@@ -37,46 +37,17 @@ const userSchema = new mongoose.Schema({
   },
   userType: {
     type: String,
-<<<<<<< HEAD
-    enum: ['customer', 'vendor', 'worker','admin'],
-=======
     enum: ['customer', 'vendor', 'worker', 'admin'],
->>>>>>> eb5f507 (New Routes has beeen added)
     required: [true, 'Please specify user type']
   },
   profileImage: {
     type: String,
     default: null,
   },
-<<<<<<< HEAD
-  isProfileCreated:{
-    type: Boolean,
-    default: false,
-  },
-  // Only in worker fields
-  aadhaarFrontImage: {
-    type: String,
-    default: null,
-  },
-  aadhaarBackImage: {
-    type: String,
-    default: null,
-  },
-  medicalCertificate: {
-    type: String,
-    default: null,
-  },
-  //vendor-specific field
-  panCardImage: {
-    type: String,
-    default:null,
-  },
-=======
   isProfileCreated: {
     type: Boolean,
     default: false,
   },
->>>>>>> eb5f507 (New Routes has beeen added)
   // Worker-specific fields
   dateOfBirth: {
     type: Date,
@@ -154,17 +125,6 @@ const userSchema = new mongoose.Schema({
     default: null,
   },
   skills: {
-<<<<<<< HEAD
-   type:[
-    {
-      skillId:{type:Number, required: true},
-      skillName:{type: String, required: true}
-    }
-   ],
-   default:[],
-  },
-  // Vendor/Contractor-specific fields
-=======
     type: [
       {
         skillId: { type: Number, required: true },
@@ -174,7 +134,6 @@ const userSchema = new mongoose.Schema({
     default: [],
   },
   // Vendor specific fields
->>>>>>> eb5f507 (New Routes has beeen added)
   designation: {
     type: String,
     default: null,
@@ -192,17 +151,6 @@ const userSchema = new mongoose.Schema({
     trim: true,
     default: null,
   },
-<<<<<<< HEAD
-  panNumber:{
-   type: String,
-   trim: true ,
-   uppercase: true,
-   default : null ,
-   match:[
-    /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
-    'Please provide a valid PAN number (i.e., ABCDE1234F)'
-   ],
-=======
   panNumber: {
     type: String,
     trim: true,
@@ -212,7 +160,6 @@ const userSchema = new mongoose.Schema({
       /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
       'Please provide a valid PAN number (i.e., ABCDE1234F)'
     ],
->>>>>>> eb5f507 (New Routes has beeen added)
   },
   gstNumber: {
     type: String,
@@ -224,18 +171,6 @@ const userSchema = new mongoose.Schema({
       'Please provide a valid GST number',
     ],
   },
-<<<<<<< HEAD
-  licenseNumber: {
-    type: String,
-    trim: true,
-    uppercase: true,
-    default: null,
-  },
-  projectTypes: {
-    type: [String],
-    enum: ['Residential Building', 'Commercial Building', 'Industrial Project', 'Infrastructure', 'Renovation', 'Interior Design'],
-    default: [],
-=======
    panCardImage: {
     type: String,
     default: null,
@@ -253,21 +188,14 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Subscription',
     default: null
->>>>>>> eb5f507 (New Routes has beeen added)
   },
   isPhoneVerified: {
     type: Boolean,
     default: false,
   },
-<<<<<<< HEAD
-  location:{
-    type:String,
-    default:null,
-=======
   location: {
     type: String,
     default: null,
->>>>>>> eb5f507 (New Routes has beeen added)
   },
   isVerified: {
     type: Boolean,

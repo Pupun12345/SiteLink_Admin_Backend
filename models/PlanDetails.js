@@ -3,10 +3,6 @@ const mongoose = require('mongoose');
 const planDetailsSchema = new mongoose.Schema({
     planName: {
         type: String,
-<<<<<<< HEAD
-        enum: ['basic', 'premium', 'enterprise'],
-        required: true,
-=======
         required: true,
         trim: true,
     },
@@ -25,18 +21,10 @@ const planDetailsSchema = new mongoose.Schema({
         type: String,
         enum: ['monthly', 'yearly'],
         default: 'monthly',
->>>>>>> eb5f507 (New Routes has beeen added)
     },
     amount: {
         type: Number,
         required: true,
-<<<<<<< HEAD
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now,
-    }
-=======
         min: 0,
     },
     features: {
@@ -47,7 +35,6 @@ const planDetailsSchema = new mongoose.Schema({
         type: Boolean,
         default: true,
     },
->>>>>>> eb5f507 (New Routes has beeen added)
 }, {
     timestamps: true
 });
