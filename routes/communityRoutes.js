@@ -5,10 +5,10 @@ const {
   createPost,
   likeUnlikePost,
   deletePost,
-  getPendingPosts,
-  approvePost,
-  rejectPost,
-  autoApprovePosts,
+  getPendingJobs,
+  approveJob,
+  rejectJob,
+  autoApproveJobs,
   addComment,
   updateComment,
   deleteComment,
@@ -28,11 +28,11 @@ router.put('/posts/:postId/like', protect, likeUnlikePost);
 // DELETE post
 router.delete('/posts/:postId', protect, deletePost);
 
-// Admin routes for post approval
-router.get('/posts/pending', protect, adminOnly, getPendingPosts);
-router.put('/posts/:postId/approve', protect, adminOnly, approvePost);
-router.put('/posts/:postId/reject', protect, adminOnly, rejectPost);
-router.post('/posts/auto-approve', autoApprovePosts);
+// Legacy job-only approval routes
+router.get('/jobs/pending', protect, adminOnly, getPendingJobs);
+router.put('/jobs/:jobId/approve', protect, adminOnly, approveJob);
+router.put('/jobs/:jobId/reject', protect, adminOnly, rejectJob);
+router.post('/jobs/auto-approve', autoApproveJobs);
 
 // Comment routes
 router.post('/posts/:id/comments', protect, addComment);

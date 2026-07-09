@@ -1,7 +1,18 @@
 const User = require('../models/User');
 const PlatformSettings = require('../models/PlatformSettings');
+const Subscription = require('../models/Subscription');
 const jobPost = require('../models/job');
 const Post = require('../models/Post');
+
+const getSubscriptionPlanDetails = (plan) => {
+  const normalizedPlan = String(plan || '').toLowerCase().trim();
+  return Subscription.getPlanConfig(normalizedPlan) || {
+    label: 'Unknown Plan',
+    amount: 0,
+    userType: 'unknown',
+    frequency: 'unknown',
+  };
+};
 
 // Get list of workers pending document verification
 exports.getPendingWorkers = async (req, res) => {
@@ -22,6 +33,54 @@ exports.getPendingWorkers = async (req, res) => {
   }
 };
 
+//Get all the Subscribed Users including both Vendors and Workers
+exports.getAllSubscriptions = async (req, res) => {
+  try {
+    const filter = { subscription: true };
+
+    const subscriptions = await User.find(filter)
+      .select('name userType subscriptionId profileImage companyLogo _id phone email companyName')
+      .populate('subscriptionId', 'plan amount startDate endDate status');
+
+    // Transform the data to match frontend expectations
+    const transformedData = subscriptions.map(sub => {
+      const subscription = sub.subscriptionId;
+      const planDetails = getSubscriptionPlanDetails(subscription?.plan);
+      const normalizedPlan = String(subscription?.plan || '').toLowerCase().trim();
+
+      return {
+        _id: sub._id,
+        userId: sub._id,
+        name: sub.name || 'Unknown',
+        userType: sub.userType,
+        companyName: sub.companyName,
+        profileImage: sub.profileImage,
+        companyLogo: sub.companyLogo,
+        phone: sub.phone,
+        email: sub.email,
+        planKey: normalizedPlan || 'unknown',
+        planName: planDetails.label || 'Unknown Plan',
+        planType: planDetails.userType === 'worker' ? 'premium' : planDetails.label?.includes('Basic') ? 'basic' : 'premium',
+        status: subscription?.status || 'active',
+        startDate: subscription?.startDate,
+        endDate: subscription?.endDate,
+        amount: subscription?.amount ?? planDetails.amount ?? 0,
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: transformedData.length,
+      data: transformedData
+    });
+  } catch (error) {
+    console.error('getAllSubscriptions error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server Error'
+    });
+  }
+};
 
 // Get worker details (for verification screen)
 exports.getWorkerDetails = async (req, res) => {
@@ -34,7 +93,7 @@ exports.getWorkerDetails = async (req, res) => {
     }
 
     const worker = await User.findById(id).select(
-      'name age phone experience city dailyRate profileImage aadhaarFrontImage aadhaarBackImage medicalCertificate certificates verificationStatus verificationStatus skills userType adminRating adminRatingComment ratedAt'
+      'name age phone experience city dailyRate profileImage aadhaarFrontImage aadhaarBackImage medicalCertificate certificates verificationStatus verificationStatus skills userType adminRating adminRatingComment ratedAt subscription'
     );
 
     if (!worker || worker.userType !== 'worker') {
@@ -332,7 +391,7 @@ exports.getPendingVendors = async (req, res) => {
     const vendors = await User.find({
       userType: 'vendor',
       verificationStatus: 'pending',
-    }).select('companyName ownerName phone city companyLogo verificationStatus createdAt email gstNumber whatsappNumber website');
+    }).select('companyName name phone city companyLogo verificationStatus createdAt email gstNumber whatsappNumber website subsciption panNumber gstCertificate panCardImage');
 
     return res.json({
       success: true,
@@ -356,7 +415,7 @@ exports.getVendors = async (req, res) => {
     }
 
     const vendors = await User.find(query).select(
-      'companyName name phone city companyLogo verificationStatus createdAt email gstNumber adminRating profileImage whatsappNumber website role workArea workState'
+      'companyName name phone city companyLogo verificationStatus createdAt email gstNumber adminRating profileImage whatsappNumber website role workArea workState subscitption panNumber gstCertificate panCardImage'
     );
 
     return res.json({
@@ -381,7 +440,7 @@ exports.getVendorDetails = async (req, res) => {
     }
 
     const vendor = await User.findById(id).select(
-      'companyName name phone email city gstNumber companyLogo verificationStatus verificationStatus userType adminRating adminRatingComment ratedAt whatsappNumber website role workArea workState profileImage'
+      'companyName name phone email city gstNumber companyLogo verificationStatus verificationStatus userType adminRating adminRatingComment ratedAt whatsappNumber website role workArea workState profileImage subscription panNumber gstCertificate panCardImage'
     );
 
     if (!vendor || vendor.userType !== 'vendor') {
@@ -558,7 +617,7 @@ exports.getAllUsers = async (req, res) => {
         profileImage companyName companyLogo city workState
         role website experience adminRating
         workArea gstNumber whatsappNumber primarySkill
-        skills willingtoRelocate salaryType salary dateOfBirth gender
+        skills willingtoRelocate salaryType salary dateOfBirth gender subscription panNumber gstCertificate panCardImage experienceCertificate
       `)
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -577,6 +636,7 @@ exports.getAllUsers = async (req, res) => {
         city: user.city,
         workState: user.workState,
         adminRating: user.adminRating,
+        subsciption: user.subscription,
         verificationStatus:
           user.verificationStatus?.charAt(0).toUpperCase() +
           user.verificationStatus?.slice(1),
@@ -599,6 +659,9 @@ exports.getAllUsers = async (req, res) => {
           website: user.website,
           gstNumber: user.gstNumber,
           whatsappNumber: user.whatsappNumber,
+          panNumber: user.panNumber,
+          gstCertificate: user.gstCertificate,
+          panCardImage: user.panCardImage
         };
       }
 
@@ -613,7 +676,8 @@ exports.getAllUsers = async (req, res) => {
         salary: user.salary,
         location: user.location,
         gender: user.gender,
-        dateOfBirth: user.dateOfBirth
+        dateOfBirth: user.dateOfBirth,
+        experienceCertificate: user.experienceCertificate
       };
     });
 
@@ -657,7 +721,7 @@ exports.getAllWorkersAndVendors = async (req, res) => {
         profileImage companyName companyLogo city workState
         role website experience adminRating
         workArea gstNumber whatsappNumber primarySkill
-        skills willingtoRelocate salaryType salary
+        skills willingtoRelocate salaryType salary subscription panNumber gstCertificate panCardImage experienceCertificate
       `)
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -677,6 +741,7 @@ exports.getAllWorkersAndVendors = async (req, res) => {
         workState: user.workState,
         adminRating: user.adminRating,
         isVerified: user.isVerified,
+        subscription: user.subscription,
         verificationRejectedReason: user.verificationRejectedReason,
         verificationStatus:
           user.verificationStatus?.charAt(0).toUpperCase() +
@@ -700,6 +765,9 @@ exports.getAllWorkersAndVendors = async (req, res) => {
           website: user.website,
           gstNumber: user.gstNumber,
           whatsappNumber: user.whatsappNumber,
+          panNumber: user.panNumber,
+          gstCertificate: user.gstCertificate,
+          panCardImage: user.panCardImage
         };
       }
 
@@ -712,7 +780,9 @@ exports.getAllWorkersAndVendors = async (req, res) => {
         experience: user.experience,
         salaryType: user.salaryType,
         salary: user.salary,
-        location: user.location
+        location: user.location,
+        experienceCertificate: user.experienceCertificate,
+        workSamplesPhoto: user.workSamplesPhoto,
       };
     });
 
@@ -772,30 +842,16 @@ exports.getUserDetails = async (req, res) => {
         salaryType: regularUser.salaryType,
         salary: regularUser.salary,
         experience: regularUser.experience,
-        gender:regularUser.gender,
-        dateOfBirth:regularUser.dateOfBirth,
+        gender: regularUser.gender,
+        dateOfBirth: regularUser.dateOfBirth,
         age: regularUser.age,
         governmentID: regularUser.governmentID,
         workSamplesPhoto: regularUser.workSamplesPhoto,
         certificates: regularUser.certificates,
         verificationStatus: regularUser.verificationStatus,
         experienceDescription: regularUser.experienceDescription,
+        subscription: regularUser.subscription,
         documents: [
-          {
-            name: 'Aadhaar Front',
-            type: 'NATIONAL ID PROOF',
-            url: regularUser.aadhaarFrontImage,
-          },
-          {
-            name: 'Aadhaar Back',
-            type: 'ID BACK',
-            url: regularUser.aadhaarBackImage,
-          },
-          {
-            name: 'Medical Certificate',
-            type: 'HEALTH CLEARANCE',
-            url: regularUser.medicalCertificate,
-          },
           {
             name: 'Government ID',
             type: 'IDENTITY PROOF',
@@ -839,7 +895,21 @@ exports.getUserDetails = async (req, res) => {
         adminRating: regularUser.adminRating,
         adminRatingComment: regularUser.adminRatingComment,
         ratedAt: regularUser.ratedAt,
-        jobPosts: jobs
+        subscription: regularUser.subscription,
+        panNumber: regularUser.panNumber,
+        jobPosts: jobs,
+        documents: [
+          {
+            name: 'GST CERTIFICATE',
+            type: 'IDENTITY PROOF',
+            url: regularUser.gstCertificate,
+          },
+          {
+            name: 'PAN CARD',
+            type: 'IDENTITY PROOF',
+            url: regularUser.panCardImage,
+          }
+        ]
       };
 
     return res.json({
@@ -905,33 +975,20 @@ exports.deleteUser = async (req, res) => {
     const { id } = req.params;
 
     if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
-      return res.status(400).json({ success: false, message: 'Invalid user ID format' });
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID format'
+      });
     }
 
     const user = await User.findById(id);
+
     if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
     }
-
-    // Delete user's uploaded files
-    const filesToDelete = [
-      user.profileImage,
-      user.aadhaarFrontImage,
-      user.aadhaarBackImage,
-      user.medicalCertificate,
-      user.governmentID,
-      user.experienceCertificate,
-      user.companyLogo,
-      user.panCardImage,
-      ...(user.workSamplesPhoto || [])
-    ].filter(Boolean);
-
-    filesToDelete.forEach(filePath => {
-      const fs = require('fs');
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    });
 
     await User.findByIdAndDelete(id);
 
@@ -941,6 +998,10 @@ exports.deleteUser = async (req, res) => {
     });
   } catch (error) {
     console.error('deleteUser error:', error);
-    return res.status(500).json({ success: false, message: 'Server error' });
+
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+    });
   }
 };

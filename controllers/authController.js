@@ -87,16 +87,12 @@ exports.register = async (req, res) => {
       otpAttempts: 0,
       isPhoneVerified: false,
       isVerified: false,
-      isPhoneVerified: false,
     };
 
     // Add email if provided
     if (req.body.email) {
       userData.email = req.body.email;
     }
-
-
-
 
     // Create user with OTP (not verified yet)
     const user = await User.create(userData);

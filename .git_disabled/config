@@ -1,0 +1,14 @@
+[core]
+	repositoryformatversion = 0
+	filemode = false
+	bare = false
+	logallrefupdates = true
+	symlinks = false
+	ignorecase = true
+[branch "main"]
+	vscode-merge-base = origin/main
+[branch "RahulPatra"]
+	vscode-merge-base = origin/main
+[remote "origin"]
+	url = https://github.com/Pupun12345/SiteLink_Admin_Backend.git
+	fetch = +refs/heads/*:refs/remotes/origin/*

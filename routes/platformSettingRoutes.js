@@ -1,6 +1,9 @@
 const express = require('express');
 const {
+  getPlans,
+  createPlan,
   editPlanAmount,
+  deletePlan,
   notificationSettings,
   verificationRulesSettings,
   languageSettings,
@@ -11,24 +14,22 @@ const { protect } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Middleware to check if user is admin
 const adminOnly = (req, res, next) => {
   if (req.user && (req.user.userType === 'admin' || req.user.role === 'admin')) {
     next();
   } else {
-    res.status(403).json({
-      success: false,
-      message: 'Access denied. Admin privileges required.'
-    });
+    res.status(403).json({ success: false, message: 'Access denied. Admin privileges required.' });
   }
 };
 
 router.use(protect);
 router.use(adminOnly);
 
-// Platform settings routes
 router.get('/', getSettings);
-router.put('/plans', editPlanAmount);
+router.get('/plans', getPlans);
+router.post('/plans', createPlan);
+router.put('/plans/:id', editPlanAmount);
+router.delete('/plans/:id', deletePlan);
 router.put('/notifications', notificationSettings);
 router.put('/verification-rules', verificationRulesSettings);
 router.put('/language', languageSettings);

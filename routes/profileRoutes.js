@@ -51,7 +51,9 @@ router.post('/worker/create', protect, upload.fields([
 // Vendor Profile Routes
 router.post('/vendor/create', protect, upload.fields([
   { name: 'profileImage', maxCount: 1 },
-  { name: 'companyLogo', maxCount: 1 }
+  { name: 'companyLogo', maxCount: 1 },
+  {name: 'gstCertificate', maxCount: 1},
+  { name: 'panCardImage', maxCount: 1 },
 ]), createVendorProfile);
 
 // Location Routes

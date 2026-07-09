@@ -12,6 +12,7 @@ const {
   addJobComment,
   getJobComments,
   deleteJobComment,
+
 } = require('../controllers/jobsController');
 const { protect } = require('../middleware/auth');
 
@@ -21,6 +22,7 @@ router.get('/', getJobs);
 // GET single job
 router.get('/:id', getJobById);
 
+//amenities rotes
 // POST create job (protected)
 router.post('/', protect, createJob);
 
@@ -47,5 +49,6 @@ router.get('/:id/comments', getJobComments);
 
 // DELETE comment from job (protected)
 router.delete('/:jobId/comments/:commentId', protect, deleteJobComment);
+
 
 module.exports = router;

@@ -15,6 +15,17 @@ const jobSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+<<<<<<< HEAD
+=======
+    latitude: {
+      type: String,
+      default: null,
+    },
+    longitude: {
+      type: String,
+      default: null,
+    },
+>>>>>>> eb5f507 (New Routes has beeen added)
     quantity: {
       type: String,
       default: '1',
@@ -118,6 +129,15 @@ const jobSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+<<<<<<< HEAD
+=======
+    amenities: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Amenities"
+      }
+    ],
+>>>>>>> eb5f507 (New Routes has beeen added)
   },
   { timestamps: true }
 );
@@ -126,12 +146,20 @@ jobSchema.index({ postedBy: 1, createdAt: -1 });
 jobSchema.index({ isActive: 1, createdAt: -1 });
 
 // Generate job ID
+<<<<<<< HEAD
 jobSchema.virtual('jobId').get(function() {
+=======
+jobSchema.virtual('jobId').get(function () {
+>>>>>>> eb5f507 (New Routes has beeen added)
   return `REQ-${this._id.toString().slice(-4).toUpperCase()}`;
 });
 
 // Add contentType virtual for unified feed
+<<<<<<< HEAD
 jobSchema.virtual('contentType').get(function() {
+=======
+jobSchema.virtual('contentType').get(function () {
+>>>>>>> eb5f507 (New Routes has beeen added)
   return 'job';
 });
 

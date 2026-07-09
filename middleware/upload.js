@@ -1,84 +1,66 @@
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const { v2: cloudinary } = require('cloudinary');
 
-// Ensure uploads directories exist
-const profileDir = 'uploads/profiles';
-const documentsDir = 'uploads/documents';
-const postsDir = 'uploads/posts';
+// Lazy initialization function
+const createStorage = () => {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
 
-if (!fs.existsSync(profileDir)) {
-  fs.mkdirSync(profileDir, { recursive: true });
-}
-if (!fs.existsSync(documentsDir)) {
-  fs.mkdirSync(documentsDir, { recursive: true });
-}
-if (!fs.existsSync(postsDir)) {
-  fs.mkdirSync(postsDir, { recursive: true });
-}
+  return new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: async (req, file) => {
+      const folderMap = {
+        profileImage: 'uploads/profiles',
+        companyLogo: 'uploads/profiles',
+        workSamplesPhoto: 'uploads/posts',
+        governmentID: 'uploads/documents',
+        gstCertificate: 'uploads/documents',
+        panCardImage: 'uploads/documents',
+        experienceCertificate: 'uploads/documents',
+        images: 'uploads/posts',
+        video: 'uploads/posts'
+      };
 
-// Configure storage
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    // Use different folders based on field name
-    if (file.fieldname === 'profileImage' || file.fieldname === 'companyLogo') {
-      cb(null, profileDir);
-    } else if (file.fieldname === 'aadhaarFrontImage' || file.fieldname === 'aadhaarBackImage'|| file.fieldname === 'panCardImage') {
-      cb(null, documentsDir);
-    } else if (file.fieldname === 'images' || file.fieldname === 'video') {
-      cb(null, postsDir);
-    } else {
-      cb(null, profileDir);
-    }
-  },
-  filename: function (req, file, cb) {
-    // Create unique filename based on field type
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    let prefix = 'file';
-    
-    if (file.fieldname === 'profileImage') {
-      prefix = 'profile';
-    } else if (file.fieldname === 'companyLogo') {
-      prefix = 'company-logo';
-    } else if (file.fieldname === 'aadhaarFrontImage') {
-      prefix = 'aadhaar-front';
-    } else if (file.fieldname === 'aadhaarBackImage') {
-      prefix = 'aadhaar-back';
-    }
-    else if (file.fieldname === 'panCardImage'){
-      prefix = 'pan-card';
-    }
-    else if (file.fieldname === 'images' || file.fieldname === 'video'){
-      prefix = 'post';
-    }
-    
-    cb(null, prefix + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
+      const prefixMap = {
+        profileImage: 'profile',
+        companyLogo: 'company-logo',
+        workSamplesPhoto: 'work-sample',
+        governmentID: 'document',
+        experienceCertificate: 'experience',
+        gstCertificate: 'gst-certificate',
+        panCardImage: 'pan-card',
+        images: 'post',
+        video: 'post'
+      };
+      
+      const folder = folderMap[file.fieldname] || 'misc';
+      const prefix = prefixMap[file.fieldname] || 'file';
+      const isVideo = file.mimetype.startsWith('video/');
 
-// File filter - accept images and videos
-const fileFilter = (req, file, cb) => {
-  if (file.fieldname === 'video') {
-    const allowedVideo = /mp4|mov|avi|mkv|webm/;
-    const extname = allowedVideo.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = /video/.test(file.mimetype);
-    if (mimetype && extname) return cb(null, true);
-    return cb(new Error('Only video files are allowed (mp4, mov, avi, mkv, webm)'));
-  }
-  const allowedTypes = /jpeg|jpg|png|gif|webp/;
-  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = allowedTypes.test(file.mimetype);
-  if (mimetype && extname) return cb(null, true);
-  cb(new Error('Only image files are allowed (jpeg, jpg, png, gif, webp)'));
+      return {
+        folder: folder,
+        public_id: `${prefix}-${Date.now()}-${Math.round(Math.random() * 1e9)}`,
+        resource_type: isVideo ? 'video' : 'auto',
+      };
+    },
+  });
 };
 
-// Create multer upload instance
 const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB to support videos
-  },
-  fileFilter: fileFilter,
+  storage: createStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
 });
 
+const handleUpload = (uploadMiddleware) => (req, res, next) => {
+  uploadMiddleware(req, res, (err) => {
+    if (err) return res.status(400).json({ success: false, message: err.message });
+    next();
+  });
+};
+
 module.exports = upload;
+module.exports.handleUpload = handleUpload;

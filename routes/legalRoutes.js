@@ -1,21 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const {
-  getPrivacyPolicy,
-  getTermsConditions,
-  getAllLegalDocuments,
-  createOrUpdateLegalDocument,
-  deleteLegalDocument,
-} = require('../controllers/legalController');
-const { protect } = require('../middleware/auth');
+const { getAllPolicies, createOrUpdatePolicy, deletePolicyVersion } = require('../controllers/legalController');
+const { adminOnly, protect } = require('../middleware/auth');
 
-// Public routes - anyone can view these
-router.get('/privacy-policy', getPrivacyPolicy);
-router.get('/terms-conditions', getTermsConditions);
 
-// Admin routes - protected
-router.get('/', protect, getAllLegalDocuments);
-router.post('/', protect, createOrUpdateLegalDocument);
-router.delete('/:type', protect, deleteLegalDocument);
+// Admin routes
+router.get('/policies', getAllPolicies);
+router.post('/policies', protect, adminOnly, createOrUpdatePolicy);
+router.delete('/policies/:id', protect, adminOnly, deletePolicyVersion);
 
 module.exports = router;

@@ -15,3 +15,6 @@ fix-email-index.js
 fixAdminUser.js
 resetAdminPassword.js
 testLogin.js
+seedUsersWithSubscription.js
+amenity.js
+seedPolicies.js

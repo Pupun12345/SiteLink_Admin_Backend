@@ -18,6 +18,7 @@ const {
   autoApprove,
   addSkillsToWorker,
   removeSkillFromWorker,
+  getAllSubscriptions,
 } = require('../controllers/adminController');
 const { protect, adminOnly } = require('../middleware/auth');
 
@@ -27,11 +28,13 @@ const router = express.Router();
 router.use(protect);
 router.use(adminOnly);
 
+
 // Admin-only user management
 router.get('/users', getAllUsers);
 router.get("/vendor-worker",getAllWorkersAndVendors);
 router.get('/users/:id', getUserDetails);
 router.put('/users/:id', updateUserDetails);
+router.get('/subscriptions',getAllSubscriptions);
 router.put('/users/:id/verify', verifyWorker);
 router.put('/users/:id/reject', rejectWorker);
 router.put('/users/:id/rate', rateWorker);

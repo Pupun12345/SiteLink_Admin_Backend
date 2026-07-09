@@ -16,68 +16,76 @@ const createAdminNotification = async (title, message, createdBy) => {
             isSystemGenerated: false
         });
     } catch (error) {
-        return res.status(500).json({
-            success: false,
-            message: 'Failed to create notification',
-            error: error.message
+        console.warn('Failed to create admin notification:', error.message);
+    }
+};
+
+exports.getPlans = async (req, res) => {
+    try {
+        let plans = await planDetails.find().sort({ createdAt: 1 });
+        if(!plans){
+            return res.status(404).json({
+                success:false,
+                message:"Plans not Found"
+            })
+        }
+        return res.status(200).json({ success: true, data: plans });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
+    }
+};
+
+exports.createPlan = async (req, res) => {
+    try {
+        const { planName, userType, planType, frequency, amount, features } = req.body;
+        if (!planName || !userType || !planType || !frequency || amount === undefined) {
+            return res.status(400).json({ success: false, message: 'planName, userType, planType, frequency and amount are required' });
+        }
+        const plan = await planDetails.create({
+            planName: planName.trim(),
+            userType,
+            planType,
+            frequency,
+            amount: parseFloat(amount),
+            features: Array.isArray(features) ? features.filter(f => f.trim()) : [],
+            isActive: true,
         });
+        return res.status(201).json({ success: true, message: 'Plan created successfully', data: plan });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
     }
 };
 
 exports.editPlanAmount = async (req, res) => {
     try {
-        const { planName, amount } = req.body;
-        console.log('Received plan update request:', { planName, amount });
-        
-        if (!planName || amount === undefined) {
-            return res.status(400).json({
-                success: false,
-                message: 'Plan name and amount are required'
-            });
-        }
+        const { id } = req.params;
+        const { planName, userType, planType, frequency, amount, features } = req.body;
 
-        const planNameMapping = {
-            'basic': 'basic',
-            'pro': 'premium',
-            'premium': 'premium', 
-            'enterprise': 'enterprise'
-        };
-        
-        const normalizedPlanName = planName.toLowerCase();
-        const backendPlanName = planNameMapping[normalizedPlanName];
-        
-        if (!backendPlanName) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid plan name. Must be Basic, Pro, or Enterprise'
-            });
-        }
+        const plan = await planDetails.findById(id);
+        if (!plan) return res.status(404).json({ success: false, message: 'Plan not found' });
 
-        let plan = await planDetails.findOne({ planName: backendPlanName });
-        if (!plan) {
-            plan = await planDetails.create({
-                planName: backendPlanName,
-                amount: parseFloat(amount)
-            });
-            console.log('Created new plan:', plan);
-        } else {
-            plan.amount = parseFloat(amount);
-            await plan.save();
-            console.log('Updated existing plan:', plan);
-        }
+        if (planName !== undefined) plan.planName = planName.trim();
+        if (userType !== undefined) plan.userType = userType;
+        if (planType !== undefined) plan.planType = planType;
+        if (frequency !== undefined) plan.frequency = frequency;
+        if (amount !== undefined) plan.amount = parseFloat(amount);
+        if (features !== undefined) plan.features = Array.isArray(features) ? features.filter(f => f.trim()) : [];
 
-        return res.status(200).json({
-            success: true,
-            message: 'Plan amount updated successfully',
-            plan
-        });
-
+        await plan.save();
+        return res.status(200).json({ success: true, message: 'Plan updated successfully', data: plan });
     } catch (error) {
-        return res.status(500).json({
-            success: false,
-            message: 'Internal server error',
-            error: error.message
-        });
+        return res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
+    }
+};
+
+exports.deletePlan = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const plan = await planDetails.findByIdAndDelete(id);
+        if (!plan) return res.status(404).json({ success: false, message: 'Plan not found' });
+        return res.status(200).json({ success: true, message: 'Plan deleted successfully' });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: 'Internal server error' });
     }
 };
 

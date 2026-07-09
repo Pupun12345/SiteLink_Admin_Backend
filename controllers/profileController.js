@@ -2,7 +2,6 @@ const User = require('../models/User');
 const PlatformSettings = require('../models/PlatformSettings');
 const Post = require('../models/Post');
 const bcrypt = require('bcryptjs');
-const fs = require('fs');
 const AdminUser = require('../models/AdminUser');
 const Skill = require('../models/Skill');
 const { verify } = require('crypto');
@@ -68,26 +67,15 @@ exports.changePassword = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide current and new password' });
     }
 
-    // Check if it's an AdminUser
-    if (req.user.userType === 'admin') {
-      const adminUser = await AdminUser.findById(req.user.id).select('+password');
-      if (!adminUser) {
-        return res.status(404).json({ success: false, message: 'Admin user not found' });
-      }
+    // First try to find in User collection (Super Admin)
+    let user = await User.findById(req.user.id).select('+password');
+    let isAdminUser = false;
 
-      const isMatch = await adminUser.comparePassword(currentPassword);
-      if (!isMatch) {
-        return res.status(400).json({ success: false, message: 'Current password is incorrect' });
-      }
-
-      adminUser.password = newPassword;
-      await adminUser.save();
-
-      return res.json({ success: true, message: 'Password changed successfully' });
+    // If not found in User, check AdminUser collection
+    if (!user) {
+      user = await AdminUser.findById(req.user.id).select('+password');
+      isAdminUser = true;
     }
-
-    // Handle regular User
-    const user = await User.findById(req.user.id).select('+password');
 
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
@@ -101,7 +89,7 @@ exports.changePassword = async (req, res) => {
     user.password = newPassword;
     await user.save();
 
-    res.json({ success: true, message: 'Password changed successfully' });
+    return res.json({ success: true, message: 'Password changed successfully' });
   } catch (error) {
     console.error('Change password error:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -154,7 +142,6 @@ exports.editCustomerProfile = async (req, res) => {
     if (city) updateData.city = city;
 
     if (req.files?.profileImage) {
-      if (user.profileImage) fs.unlink(user.profileImage, () => { });
       updateData.profileImage = req.files.profileImage[0].path;
     }
 
@@ -218,11 +205,6 @@ exports.editAdminProfile = async (req, res) => {
 
         if (req.files?.profileImage) {
           console.log('New profile image uploaded:', req.files.profileImage[0].path);
-          if (adminUser.profileImage) {
-            fs.unlink(adminUser.profileImage, (err) => {
-              if (err) console.error('Error deleting old profile image:', err);
-            });
-          }
           adminUser.profileImage = req.files.profileImage[0].path;
         }
 
@@ -255,11 +237,6 @@ exports.editAdminProfile = async (req, res) => {
 
         if (req.files?.profileImage) {
           console.log('New profile image uploaded:', req.files.profileImage[0].path);
-          if (user.profileImage) {
-            fs.unlink(user.profileImage, (err) => {
-              if (err) console.error('Error deleting old profile image:', err);
-            });
-          }
           user.profileImage = req.files.profileImage[0].path;
         }
 
@@ -459,7 +436,7 @@ exports.createWorkerProfile = async (req, res) => {
   try {
     // Check if admin is creating worker or user is creating their own profile
     const isAdmin = req.user.userType === 'admin';
-    
+
     let user;
     if (isAdmin) {
       // Admin creating a new worker - validate phone is provided
@@ -467,13 +444,13 @@ exports.createWorkerProfile = async (req, res) => {
       if (!phone) {
         return res.status(400).json({ success: false, message: 'Phone number is required' });
       }
-      
+
       // Check if user with phone already exists
       user = await User.findOne({ phone });
       if (user) {
         return res.status(400).json({ success: false, message: 'User with this phone number already exists' });
       }
-      
+
       // Create new user for worker
       user = new User({
         phone,
@@ -484,11 +461,11 @@ exports.createWorkerProfile = async (req, res) => {
     } else {
       // User creating their own worker profile
       user = await User.findById(req.user.id);
-      
+
       if (!user) {
         return res.status(404).json({ success: false, message: 'User not found' });
       }
-      
+
       if (user.userType && user.userType !== 'worker') {
         return res.status(403).json({ success: false, message: 'Access denied' });
       }
@@ -667,7 +644,7 @@ exports.editWorkerProfile = async (req, res) => {
   try {
     // Check if admin is editing worker or user is editing their own profile
     const isAdmin = req.user.userType === 'admin';
-    
+
     let user;
     if (isAdmin) {
       // Admin editing a worker - get worker ID from request
@@ -675,19 +652,19 @@ exports.editWorkerProfile = async (req, res) => {
       if (!workerId) {
         return res.status(400).json({ success: false, message: 'Worker ID is required' });
       }
-      
+
       user = await User.findById(workerId);
       if (!user) {
         return res.status(404).json({ success: false, message: 'Worker not found' });
       }
-      
+
       if (user.userType !== 'worker') {
         return res.status(403).json({ success: false, message: 'User is not a worker' });
       }
     } else {
       // User editing their own worker profile
       user = await User.findById(req.user.id);
-      
+
       if (!user || user.userType !== 'worker') {
         return res.status(403).json({ success: false, message: 'Access denied' });
       }
@@ -824,8 +801,8 @@ exports.editWorkerProfile = async (req, res) => {
 
     if (req.files) {
       if (req.files.profileImage) {
-        if (user.profileImage) fs.unlink(user.profileImage, () => { });
-        user.profileImage = req.files.profileImage[0].path;
+        if (user.profileImage)
+          user.profileImage = req.files.profileImage[0].path;
       }
       if (req.files.workSamplesPhoto) user.workSamplesPhoto = req.files.workSamplesPhoto.map(f => f.path);
       if (req.files.experienceCertificate) user.experienceCertificate = req.files.experienceCertificate[0].path;
@@ -851,7 +828,7 @@ exports.createVendorProfile = async (req, res) => {
   try {
     // Check if admin is creating vendor or user is creating their own profile
     const isAdmin = req.user.userType === 'admin';
-    
+
     let user;
     if (isAdmin) {
       // Admin creating a new vendor
@@ -859,38 +836,39 @@ exports.createVendorProfile = async (req, res) => {
       if (!phone) {
         return res.status(400).json({ success: false, message: 'Phone number is required' });
       }
-      
+
       // Check if user with phone already exists
       user = await User.findOne({ phone });
       if (user) {
         return res.status(400).json({ success: false, message: 'User with this phone number already exists' });
       }
-      
+
       // Create new user for vendor with auto phone verified
       user = new User({
         phone,
         userType: 'vendor',
-        isPhoneVerified: true, 
+        isPhoneVerified: true,
         verificationStatus: 'pending'
       });
     } else {
       // User create their own vendor profile
       user = await User.findById(req.user.id);
-      
+
       if (!user) {
         return res.status(404).json({ success: false, message: 'User not found' });
       }
-      
+
       if (user.userType && user.userType !== 'vendor') {
         return res.status(403).json({ success: false, message: 'Access denied' });
       }
     }
 
-    const { companyName, name, email, designation, workArea, gstNumber, whatsappNumber, website, workStateID, workCityID } = req.body;
+    const { companyName, name, email, designation, workArea, gstNumber, whatsappNumber, website, workStateID, workCityID, panNumber } = req.body;
 
     if (!companyName) return res.status(400).json({ success: false, message: 'Company name is required' });
     if (!name) return res.status(400).json({ success: false, message: 'Name is required' });
     if (!designation) return res.status(400).json({ success: false, message: 'Designation is required' });
+    if (!panNumber) return res.status(400).json({ success: false, message: 'Pan Number is required' });
 
     if ((workStateID && !workCityID) || (!workStateID && workCityID)) {
       return res.status(400).json({
@@ -913,13 +891,19 @@ exports.createVendorProfile = async (req, res) => {
     if (gstNumber) user.gstNumber = gstNumber;
     if (whatsappNumber) user.whatsappNumber = whatsappNumber;
     if (website) user.website = website.trim();
+    if (panNumber) user.panNumber = panNumber;
     user.userType = 'vendor';
     user.isProfileCreated = true;
 
     if (req.files) {
       if (req.files.profileImage) user.profileImage = req.files.profileImage[0].path;
       if (req.files.companyLogo) user.companyLogo = req.files.companyLogo[0].path;
+      if (req.files.panCardImage) user.panCardImage = req.files.panCardImage[0].path;
+      if (req.files.gstCertificate) user.gstCertificate = req.files.gstCertificate[0].path;
     }
+
+    if (!user.panCardImage) return res.status(400).json({ success: false, message: 'PanCard image is required' });
+    if (!user.gstCertificate) return res.status(400).json({ success: false, message: 'GST Certificate image is required' });
 
     await user.save();
     const savedUser = await User.findById(user._id);
@@ -927,7 +911,9 @@ exports.createVendorProfile = async (req, res) => {
     res.json({
       success: true,
       message: 'Vendor profile created successfully',
-      user: { id: savedUser._id, name: savedUser.name, phone: savedUser.phone, email: savedUser.email, userType: savedUser.userType, role: savedUser.role, profileImage: savedUser.profileImage, companyName: savedUser.companyName, companyLogo: savedUser.companyLogo, designation: savedUser.role, workCity: savedUser.city, workState: savedUser.workState, workArea: savedUser.workArea, gstNumber: savedUser.gstNumber, whatsappNumber: savedUser.whatsappNumber, website: savedUser.website, isVerified: savedUser.isVerified, verificationStatus: savedUser.verificationStatus, isProfileCreated: savedUser.isProfileCreated }
+      user: {
+        id: savedUser._id, name: savedUser.name, phone: savedUser.phone, email: savedUser.email, userType: savedUser.userType, role: savedUser.role, profileImage: savedUser.profileImage, companyName: savedUser.companyName, companyLogo: savedUser.companyLogo, gstCertificate: savedUser.gstCertificate, panCardImage: savedUser.panCardImage, designation: savedUser.role, workCity: savedUser.city, workState: savedUser.workState, workArea: savedUser.workArea, gstNumber: savedUser.gstNumber, whatsappNumber: savedUser.whatsappNumber, website: savedUser.website, panNumber: savedUser.panNumber, isVerified: savedUser.isVerified, verificationStatus: savedUser.verificationStatus, isProfileCreated: savedUser.isProfileCreated
+      }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -939,7 +925,7 @@ exports.editVendorProfile = async (req, res) => {
   try {
     // Check if admin is editing vendor or user is editing their own profile
     const isAdmin = req.user.userType === 'admin';
-    
+
     let user;
     if (isAdmin) {
       // Admin editing a vendor - get vendor ID from request
@@ -947,25 +933,25 @@ exports.editVendorProfile = async (req, res) => {
       if (!vendorId) {
         return res.status(400).json({ success: false, message: 'Vendor ID is required' });
       }
-      
+
       user = await User.findById(vendorId);
       if (!user) {
         return res.status(404).json({ success: false, message: 'Vendor not found' });
       }
-      
+
       if (user.userType !== 'vendor') {
         return res.status(403).json({ success: false, message: 'User is not a vendor' });
       }
     } else {
       // User editing their own vendor profile
       user = await User.findById(req.user.id);
-      
+
       if (!user || user.userType !== 'vendor') {
         return res.status(403).json({ success: false, message: 'Access denied' });
       }
     }
 
-    const { companyName, name, email, designation, workArea, gstNumber, whatsappNumber, website, workStateID, workCityID } = req.body;
+    const { companyName, name, email, designation, workArea, gstNumber, whatsappNumber, website, workStateID, workCityID, panNumber } = req.body;
 
     if ((workStateID && !workCityID) || (!workStateID && workCityID)) {
       return res.status(400).json({
@@ -988,25 +974,25 @@ exports.editVendorProfile = async (req, res) => {
     if (gstNumber) user.gstNumber = gstNumber;
     if (whatsappNumber) user.whatsappNumber = whatsappNumber;
     if (website) user.website = website.trim();
+    if (panNumber) user.panNumber = panNumber;
 
     if (req.files) {
-      if (req.files.profileImage) {
-        if (user.profileImage) fs.unlink(user.profileImage, () => { });
-        user.profileImage = req.files.profileImage[0].path;
-      }
-      if (req.files.companyLogo) {
-        if (user.companyLogo) fs.unlink(user.companyLogo, () => { });
-        user.companyLogo = req.files.companyLogo[0].path;
-      }
+      if (req.files.profileImage) user.profileImage = req.files.profileImage[0].path;
+      if (req.files.companyLogo) user.companyLogo = req.files.companyLogo[0].path;
+      if (req.files.panCardImage) user.panCardImage = req.files.panCardImage[0].path;
+      if (req.files.gstCertificate) user.gstCertificate = req.files.gstCertificate[0].path;
     }
 
+    if (!user.panCardImage) return res.status(400).json({ success: false, message: 'PanCard image is required' });
+    if (!user.gstCertificate) return res.status(400).json({ success: false, message: 'GST Certificate image is required' });
+
     await user.save();
-    const savedUser = await User.findById(req.user.id);
+    const savedUser = await User.findById(user._id);
 
     res.json({
       success: true,
       message: 'Vendor profile updated successfully',
-      user: { id: savedUser._id, name: savedUser.name, phone: savedUser.phone, email: savedUser.email, userType: savedUser.userType, role: savedUser.role, profileImage: savedUser.profileImage, companyName: savedUser.companyName, companyLogo: savedUser.companyLogo, designation: savedUser.role, workCity: savedUser.city, workState: savedUser.workState, workArea: savedUser.workArea, gstNumber: savedUser.gstNumber, whatsappNumber: savedUser.whatsappNumber, website: savedUser.website, isVerified: savedUser.isVerified, verificationStatus: savedUser.verificationStatus, isProfileCreated: savedUser.isProfileCreated }
+      user: { id: savedUser._id, name: savedUser.name, phone: savedUser.phone, email: savedUser.email, userType: savedUser.userType, role: savedUser.role, profileImage: savedUser.profileImage, companyName: savedUser.companyName, companyLogo: savedUser.companyLogo, gstCertificate: savedUser.gstCertificate, panCardImage: savedUser.panCardImage, designation: savedUser.role, workCity: savedUser.city, workState: savedUser.workState, workArea: savedUser.workArea, gstNumber: savedUser.gstNumber, whatsappNumber: savedUser.whatsappNumber, website: savedUser.website, panNumber: savedUser.panNumber, isVerified: savedUser.isVerified, verificationStatus: savedUser.verificationStatus, isProfileCreated: savedUser.isProfileCreated }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

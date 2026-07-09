@@ -10,31 +10,27 @@ exports.getCommunityFeed = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const posterType = req.query.posterType || null;
+    const skip = (page - 1) * limit;
 
-    let postFilter = { isActive: true, approvalStatus: 'approved' };
-    let jobFilter = { isActive: true, approvalStatus: 'approved' };
+    const filter = {
+      isActive: true,
+      approvalStatus: "approved",
+    };
 
-    if (posterType) {
-      postFilter.posterType = posterType;
-    }
+    const [posts, total] = await Promise.all([
+      Post.find(filter)
+        .populate("postedBy", "name profileImage")
+        .populate("likes.userId", "name")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
 
-    // Fetch posts
-    const posts = await Post.find(postFilter)
-      .populate('postedBy', 'name profileImage')
-      .populate('likes.userId', 'name')
-      .lean();
+      Post.countDocuments(filter),
+    ]);
 
-    // Fetch jobs
-    const jobs = await Job.find(jobFilter)
-      .populate('postedBy', 'name profileImage companyName')
-      .populate('likes.userId', 'name')
-      .lean();
-
-    // Format posts
-    const formattedPosts = posts.map(post => ({
+    const formattedPosts = posts.map((post) => ({
+      type: "post",
       _id: post._id,
-      contentType: 'post',
       content: post.content,
       images: post.images,
       video: post.video,
@@ -47,63 +43,26 @@ exports.getCommunityFeed = async (req, res) => {
       likesCount: post.likesCount,
       commentsCount: post.commentsCount,
       createdAt: post.createdAt,
-      likes: post.likes.map(like => ({
+      likes: (post.likes || []).map((like) => ({
         userId: like.userId?._id,
         userName: like.userId?.name,
       })),
     }));
 
-    // Format jobs
-    const formattedJobs = jobs.map(job => ({
-      _id: job._id,
-      contentType: 'job',
-      title: job.title,
-      company: job.company,
-      location: job.location,
-      quantity: job.quantity,
-      salary: job.salary,
-      salaryType: job.salaryType,
-      isUrgent: job.isUrgent,
-      duration: job.duration,
-      description: job.description,
-      experience: job.experience,
-      status: job.status,
-      applicationsCount: job.applicationsCount,
-      posterName: job.postedBy?.name,
-      posterImage: job.postedBy?.profileImage,
-      companyName: job.postedBy?.companyName || job.company,
-      likesCount: job.likesCount,
-      commentsCount: job.commentsCount,
-      createdAt: job.createdAt,
-      likes: job.likes?.map(like => ({
-        userId: like.userId?._id,
-        userName: like.userId?.name,
-      })) || [],
-    }));
-
-    // Combine and sort by createdAt
-    const combinedFeed = [...formattedPosts, ...formattedJobs]
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-    // Apply pagination
-    const skip = (page - 1) * limit;
-    const paginatedFeed = combinedFeed.slice(skip, skip + limit);
-    const total = combinedFeed.length;
-
     res.status(200).json({
       success: true,
-      data: paginatedFeed,
+      data: formattedPosts,
       pagination: {
         current: page,
-        limit: limit,
-        total: total,
+        limit,
+        total,
         pages: Math.ceil(total / limit),
       },
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error fetching community feed',
+      message: "Error fetching community feed",
       error: error.message,
     });
   }
@@ -123,11 +82,11 @@ exports.createPost = async (req, res) => {
     }
 
     const images = req.files?.images
-      ? req.files.images.map(file => `/uploads/posts/${file.filename}`)
+      ? req.files.images.map(file => file.path)
       : [];
 
     const video = req.files?.video?.[0]
-      ? `/uploads/posts/${req.files.video[0].filename}`
+      ? req.files.video[0].path
       : null;
 
     const postData = {
@@ -140,7 +99,9 @@ exports.createPost = async (req, res) => {
       companyName: user.companyName || user.ownerName || null,
       images,
       video,
-      verification: user.verificationStatus || 'unverified',
+      verification: user.verificationStatus || "unverified",
+      approvalStatus: "approved",
+      approvedAt: new Date(),
     };
 
     const post = await Post.create(postData);
@@ -167,6 +128,8 @@ exports.createPost = async (req, res) => {
         commentsCount: populatedPost.commentsCount,
         createdAt: populatedPost.createdAt,
         likes: populatedPost.likes,
+        approvalStatus: populatedPost.approvalStatus,
+        approvedAt: populatedPost.approvedAt
       },
     });
   } catch (error) {
@@ -269,150 +232,52 @@ exports.deletePost = async (req, res) => {
   }
 };
 
-// @desc    Get pending posts and jobs for admin approval
-// @route   GET /api/community/posts/pending
-// @access  Admin only
-exports.getPendingPosts = async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
-
-    // Fetch pending posts
-    const posts = await Post.find({ approvalStatus: 'pending' })
-      .populate('postedBy', 'name profileImage userType')
-      .lean();
-
-    // Fetch pending jobs
-    const jobs = await Job.find({ approvalStatus: 'pending' })
-      .populate('postedBy', 'name profileImage userType companyName')
-      .lean();
-
-    // Format posts with proper data
-    const formattedPosts = posts.map(post => {
-      const posterImage = post.posterImage || post.postedBy?.profileImage;
-      return {
-        ...post,
-        contentType: 'post',
-        posterImage: posterImage,
-        posterName: post.posterName || post.postedBy?.name,
-        posterType: post.posterType || post.postedBy?.userType
-      };
-    });
-
-    // Format jobs with proper data
-    const formattedJobs = jobs.map(job => {
-      const posterImage = job.postedBy?.profileImage;
-      return {
-        ...job,
-        contentType: 'job',
-        posterImage: posterImage,
-        posterName: job.postedBy?.name,
-        posterType: job.postedBy?.userType
-      };
-    });
-
-    // Combine and sort by createdAt
-    const combinedPending = [...formattedPosts, ...formattedJobs]
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-    // Apply pagination
-    const paginatedPending = combinedPending.slice(skip, skip + limit);
-    const total = combinedPending.length;
-
-    res.status(200).json({
-      success: true,
-      data: paginatedPending,
-      pagination: {
-        current: page,
-        limit: limit,
-        total: total,
-        pages: Math.ceil(total / limit),
-      },
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching pending posts',
-      error: error.message,
-    });
-  }
-};
 
 // @desc    Approve a post or job
-// @route   PUT /api/community/posts/:postId/approve
+// @route   PUT /api/community/posts/:id/approve
 // @access  Admin only
 exports.approvePost = async (req, res) => {
   try {
-    const { postId } = req.params;
-    const adminId = req.user._id;
+    const { id } = req.params;
     const { contentType } = req.body;
+    const adminId = req.user._id;
 
-    let item;
-    if (contentType === 'job') {
-      item = await Job.findById(postId);
-    } else {
-      item = await Post.findById(postId);
-    }
+    const Model = contentType === 'job' ? Job : Post;
+    const item = await Model.findById(id);
 
     if (!item) {
-      return res.status(404).json({
-        success: false,
-        message: `${contentType === 'job' ? 'Job' : 'Post'} not found`,
-      });
+      return res.status(404).json({ success: false, message: `${contentType || 'Item'} not found` });
     }
 
     item.approvalStatus = 'approved';
     item.approvedBy = adminId;
     item.approvedAt = new Date();
-    if (contentType !== 'job') {
-      item.autoApproved = false;
-    }
-
     await item.save();
 
-    res.status(200).json({
-      success: true,
-      message: `${contentType === 'job' ? 'Job' : 'Post'} approved successfully`,
-      data: item,
-    });
+    res.status(200).json({ success: true, message: 'Approved successfully', data: item });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error approving item',
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: 'Error approving item', error: error.message });
   }
 };
 
 // @desc    Reject a post or job
-// @route   PUT /api/community/posts/:postId/reject
+// @route   PUT /api/community/posts/:id/reject
 // @access  Admin only
 exports.rejectPost = async (req, res) => {
   try {
-    const { postId } = req.params;
+    const { id } = req.params;
     const { reason, contentType } = req.body;
     const adminId = req.user._id;
 
     if (!reason || !reason.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Rejection reason is required',
-      });
+      return res.status(400).json({ success: false, message: 'Rejection reason is required' });
     }
 
-    let item;
-    if (contentType === 'job') {
-      item = await Job.findById(postId);
-    } else {
-      item = await Post.findById(postId);
-    }
+    const Model = contentType === 'job' ? Job : Post;
+    const item = await Model.findById(id);
 
     if (!item) {
-      return res.status(404).json({
-        success: false,
-        message: `${contentType === 'job' ? 'Job' : 'Post'} not found`,
-      });
+      return res.status(404).json({ success: false, message: `${contentType || 'Item'} not found` });
     }
 
     item.approvalStatus = 'rejected';
@@ -420,54 +285,173 @@ exports.rejectPost = async (req, res) => {
     item.approvedAt = new Date();
     item.rejectionReason = reason.trim();
     item.isActive = false;
-
     await item.save();
+
+    res.status(200).json({ success: true, message: 'Rejected successfully', data: item });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error rejecting item', error: error.message });
+  }
+};
+
+// @desc    Get all pending jobs
+// @route   GET /api/community/jobs/pending
+// @access  Admin only
+exports.getPendingJobs = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const filter = {
+      approvalStatus: "pending",
+    };
+
+    const [jobs, total] = await Promise.all([
+      Job.find(filter)
+        .populate(
+          "postedBy",
+          "name profileImage userType companyName ownerName"
+        )
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+
+      Job.countDocuments(filter),
+    ]);
+
+    const formattedJobs = jobs.map((job) => ({
+      ...job,
+      contentType: "job",
+      posterName: job.postedBy?.name,
+      posterImage: job.postedBy?.profileImage,
+      posterType: job.postedBy?.userType,
+      companyName:
+        job.companyName ||
+        job.postedBy?.companyName ||
+        job.postedBy?.ownerName ||
+        null,
+    }));
 
     res.status(200).json({
       success: true,
-      message: `${contentType === 'job' ? 'Job' : 'Post'} rejected successfully`,
-      data: item,
+      data: formattedJobs,
+      pagination: {
+        current: page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error rejecting item',
+      message: "Error fetching pending jobs",
       error: error.message,
     });
   }
 };
 
-// @desc    Auto-approve posts and jobs older than 24 hours
-// @route   POST /api/community/posts/auto-approve
-// @access  System/Cron
-exports.autoApprovePosts = async (req, res) => {
+// @desc    Approve a job
+// @route   PUT /api/community/jobs/:jobId/approve
+// @access  Admin only
+exports.approveJob = async (req, res) => {
   try {
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 hours
+    const { jobId } = req.params;
+    const adminId = req.user._id;
 
-    // Auto-approve posts
-    const postResult = await Post.updateMany(
+    const job = await Job.findById(jobId);
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: "Job not found",
+      });
+    }
+
+    job.approvalStatus = "approved";
+    job.approvedBy = adminId;
+    job.approvedAt = new Date();
+
+    await job.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Job approved successfully",
+      data: job,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error approving job",
+      error: error.message,
+    });
+  }
+};
+
+
+// @desc    Reject a job
+// @route   PUT /api/community/jobs/:jobId/reject
+// @access  Admin only
+exports.rejectJob = async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const { reason } = req.body;
+    const adminId = req.user._id;
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Rejection reason is required",
+      });
+    }
+
+    const job = await Job.findById(jobId);
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: "Job not found",
+      });
+    }
+
+    job.approvalStatus = "rejected";
+    job.approvedBy = adminId;
+    job.approvedAt = new Date();
+    job.rejectionReason = reason.trim();
+    job.isActive = false;
+
+    await job.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Job rejected successfully",
+      data: job,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error rejecting job",
+      error: error.message,
+    });
+  }
+};
+
+// @desc    Auto-approve jobs older than 12 hours
+// @route   POST /api/community/jobs/auto-approve
+// @access  System/Cron
+exports.autoApproveJobs = async (req, res) => {
+  try {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
+
+    const result = await Job.updateMany(
       {
-        approvalStatus: 'pending',
-        createdAt: { $lte: twentyFourHoursAgo },
+        approvalStatus: "pending",
+        createdAt: { $lte: twelveHoursAgo },
       },
       {
         $set: {
-          approvalStatus: 'approved',
-          autoApproved: true,
-          approvedAt: new Date(),
-        },
-      }
-    );
-
-    // Auto-approve jobs
-    const jobResult = await Job.updateMany(
-      {
-        approvalStatus: 'pending',
-        createdAt: { $lte: twentyFourHoursAgo },
-      },
-      {
-        $set: {
-          approvalStatus: 'approved',
+          approvalStatus: "approved",
           approvedAt: new Date(),
         },
       }
@@ -475,14 +459,13 @@ exports.autoApprovePosts = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `Auto-approved ${postResult.modifiedCount} posts and ${jobResult.modifiedCount} jobs after 24 hours`,
-      posts: postResult.modifiedCount,
-      jobs: jobResult.modifiedCount,
+      message: `Auto-approved ${result.modifiedCount} jobs after 12 hours`,
+      jobs: result.modifiedCount,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error auto-approving items',
+      message: "Error auto-approving jobs",
       error: error.message,
     });
   }

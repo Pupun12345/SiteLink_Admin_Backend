@@ -202,9 +202,9 @@ const getSystemLogs = async (limit = 20, level = 'all', timeframe = '24h') => {
   );
   
   // Convert API errors to log format
-  recentErrors.forEach(error => {
+  recentErrors.forEach((error, index) => {
     logs.push({
-      id: `api_error_${error.timestamp}`,
+      id: `api_error_${error.timestamp}_${index}`,
       timestamp: error.timestamp,
       service: 'API-Gateway',
       level: error.statusCode >= 500 ? 'Critical' : 'Error',

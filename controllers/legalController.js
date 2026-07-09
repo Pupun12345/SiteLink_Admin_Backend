@@ -1,191 +1,108 @@
-const Legal = require('../models/Legal');
+const LegalPolicy = require('../models/LegalPolicy');
 
-// Get Privacy Policy
-exports.getPrivacyPolicy = async (req, res) => {
+exports.getAllPoliciesPublic = async (req, res) => {
   try {
-    const privacyPolicy = await Legal.findOne({ 
-      type: 'privacy-policy', 
-      isActive: true 
-    }).select('-__v');
+    const policies = await LegalPolicy.find()
+      .populate('createdBy', 'name email')
+      .sort({ policyType: 1, version: -1 });
 
-    if (!privacyPolicy) {
-      return res.status(404).json({
-        success: false,
-        message: 'Privacy Policy not found',
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      data: privacyPolicy,
-    });
-  } catch (error) {
-    console.error('Get Privacy Policy error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while fetching Privacy Policy',
-      error: error.message,
-    });
-  }
-};
-
-// Get Terms and Conditions
-exports.getTermsConditions = async (req, res) => {
-  try {
-    const termsConditions = await Legal.findOne({ 
-      type: 'terms-conditions', 
-      isActive: true 
-    }).select('-__v');
-
-    if (!termsConditions) {
-      return res.status(404).json({
-        success: false,
-        message: 'Terms and Conditions not found',
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      data: termsConditions,
-    });
-  } catch (error) {
-    console.error('Get Terms and Conditions error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while fetching Terms and Conditions',
-      error: error.message,
-    });
-  }
-};
-
-// Get all legal documents (Admin only)
-exports.getAllLegalDocuments = async (req, res) => {
-  try {
-    if (!req.user || req.user.role !== 'admin') {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Access denied. Admin only.' 
-      });
-    }
-
-    const documents = await Legal.find()
-      .populate('lastUpdatedBy', 'name email')
-      .sort({ updatedAt: -1 });
-
-    res.status(200).json({
-      success: true,
-      count: documents.length,
-      data: documents,
-    });
-  } catch (error) {
-    console.error('Get all legal documents error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while fetching legal documents',
-      error: error.message,
-    });
-  }
-};
-
-// Create or Update Legal Document (Admin only)
-exports.createOrUpdateLegalDocument = async (req, res) => {
-  try {
-    if (!req.user || req.user.role !== 'admin') {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Access denied. Admin only.' 
-      });
-    }
-
-    const { type, title, content, version, effectiveDate } = req.body;
-
-    if (!type || !title || !content) {
-      return res.status(400).json({
-        success: false,
-        message: 'Type, title, and content are required',
-      });
-    }
-
-    if (!['privacy-policy', 'terms-conditions'].includes(type)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid type. Must be privacy-policy or terms-conditions',
-      });
-    }
-
-    const documentData = {
-      type,
-      title,
-      content,
-      version: version || '1.0',
-      lastUpdatedBy: req.user._id,
-      isActive: true,
+    const grouped = {
+      PRIVACY_POLICY: policies.filter(p => p.policyType === 'PRIVACY_POLICY'),
+      TERMS_AND_CONDITIONS: policies.filter(p => p.policyType === 'TERMS_AND_CONDITIONS'),
+      HELP_AND_SUPPORT: policies.filter(p => p.policyType === 'HELP_AND_SUPPORT'),
     };
 
-    if (effectiveDate) {
-      documentData.effectiveDate = effectiveDate;
-    }
-
-    // Find and update or create new
-    const document = await Legal.findOneAndUpdate(
-      { type },
-      documentData,
-      { new: true, upsert: true, runValidators: true }
-    );
-
-    res.status(200).json({
-      success: true,
-      message: `${type === 'privacy-policy' ? 'Privacy Policy' : 'Terms and Conditions'} ${document.isNew ? 'created' : 'updated'} successfully`,
-      data: document,
-    });
+    res.status(200).json({ success: true, data: grouped });
   } catch (error) {
-    console.error('Create/Update legal document error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while creating/updating legal document',
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: 'Error fetching policies', error: error.message });
   }
 };
 
-// Delete Legal Document (Admin only)
-exports.deleteLegalDocument = async (req, res) => {
+// Create a new policy version (Admin only)
+exports.createOrUpdatePolicy = async (req, res) => {
   try {
-    if (!req.user || req.user.role !== 'admin') {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Access denied. Admin only.' 
-      });
+    const { policyType, title, content, changelog, summary, effectiveDate, version } = req.body;
+    const userId = req.user?.id;
+
+    if (!policyType || !title || !content) {
+      return res.status(400).json({ success: false, message: 'policyType, title, and content are required' });
     }
 
-    const { type } = req.params;
-
-    if (!['privacy-policy', 'terms-conditions'].includes(type)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid type. Must be privacy-policy or terms-conditions',
-      });
+    const validTypes = ['PRIVACY_POLICY', 'TERMS_AND_CONDITIONS','HELP_AND_SUPPORT'];
+    if (!validTypes.includes(policyType.toUpperCase())) {
+      return res.status(400).json({ success: false, message: 'Invalid policy type. Must be PRIVACY_POLICY or TERMS_AND_CONDITIONS or HELP_AND_SUPPORT' });
     }
 
-    const document = await Legal.findOneAndDelete({ type });
-
-    if (!document) {
-      return res.status(404).json({
-        success: false,
-        message: 'Legal document not found',
-      });
+    // Determine version number — use admin-provided or auto-increment
+    let newVersion;
+    if (version && !isNaN(parseFloat(version))) {
+      newVersion = parseFloat(version);
+    } else {
+      const latest = await LegalPolicy.findOne({ policyType: policyType.toUpperCase() }).sort({ version: -1 });
+      newVersion = latest ? latest.version + 1 : 1;
     }
 
-    res.status(200).json({
-      success: true,
-      message: 'Legal document deleted successfully',
+    // Deactivate all previous versions of this policy type
+    await LegalPolicy.updateMany({ policyType: policyType.toUpperCase() }, { isActive: false });
+
+    const newPolicy = new LegalPolicy({
+      policyType: policyType.toUpperCase(),
+      title,
+      content,
+      version: newVersion,
+      isActive: true,
+      effectiveDate: effectiveDate || new Date(),
+      createdBy: userId,
+      lastUpdatedBy: userId,
+      changelog,
+      summary,
     });
+
+    await newPolicy.save();
+
+    const populatedPolicy = await LegalPolicy.findById(newPolicy._id).populate('createdBy', 'name email');
+
+    res.status(201).json({ success: true, message: `${policyType} created successfully`, data: populatedPolicy });
   } catch (error) {
-    console.error('Delete legal document error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while deleting legal document',
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: 'Error creating policy', error: error.message });
   }
 };
+
+// Get all policies — all versions of both types (Admin)
+exports.getAllPolicies = async (req, res) => {
+  try {
+    const policies = await LegalPolicy.find()
+      .populate('createdBy', 'name email')
+      .populate('lastUpdatedBy', 'name email')
+      .sort({ policyType: 1, version: -1 });
+
+    res.status(200).json({ success: true, data: policies });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching policies', error: error.message });
+  }
+};
+
+// Delete a specific policy version (Admin only)
+exports.deletePolicyVersion = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const policy = await LegalPolicy.findById(id);
+
+    if (!policy) {
+      return res.status(404).json({ success: false, message: 'Policy not found' });
+    }
+
+    await LegalPolicy.findByIdAndDelete(id);
+
+    // If deleted policy was active, promote the next latest version
+    if (policy.isActive) {
+      const next = await LegalPolicy.findOne({ policyType: policy.policyType }).sort({ version: -1 });
+      if (next) { next.isActive = true; await next.save(); }
+    }
+
+    res.status(200).json({ success: true, message: 'Policy version deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error deleting policy', error: error.message });
+  }
+};
+
