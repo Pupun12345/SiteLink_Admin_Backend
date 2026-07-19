@@ -97,17 +97,17 @@ exports.register = async (req, res) => {
     // Create user with OTP (not verified yet)
     const user = await User.create(userData);
 
-    // In production, send OTP via SMS
-    // For development, we'll return it in the response
-    console.log(`OTP for +91${phone}: ${otp}`);
+    // OTP sirf non-production me response/log me aata hai (SMS provider TODO).
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (!isProduction) console.log(`[DEV ONLY] OTP for +91${phone}: ${otp}`);
 
     res.status(200).json({
       success: true,
       message: 'Registration successful. OTP sent to +91' + phone,
       data: {
         phone: user.phone,
-        otp: otp,
         expiresIn: '10 minutes',
+        ...(isProduction ? {} : { otp }),
       },
     });
   } catch (error) {
@@ -378,16 +378,17 @@ exports.resendOtp = async (req, res, next) => {
     user.otpAttempts = 0;
     await user.save();
 
-    // In production, send OTP via SMS
-    console.log(`New OTP for +91${phone}: ${otp}`);
+    // OTP sirf non-production me response/log me aata hai (SMS provider TODO).
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (!isProduction) console.log(`[DEV ONLY] New OTP for +91${phone}: ${otp}`);
 
     res.status(200).json({
       success: true,
       message: 'OTP resent successfully to +91' + phone,
       data: {
         phone: user.phone,
-        otp: otp, // Remove this in production!
         expiresIn: '10 minutes',
+        ...(isProduction ? {} : { otp }),
       },
     });
   } catch (error) {
@@ -457,15 +458,17 @@ exports.forgotPassword = async (req, res) => {
     user.otpAttempts = 0;
     await user.save();
 
-    console.log(`OTP for +91${phone}: ${otp}`);
+    // OTP sirf non-production me response/log me aata hai (SMS provider TODO).
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (!isProduction) console.log(`[DEV ONLY] OTP for +91${phone}: ${otp}`);
 
     res.status(200).json({
       success: true,
       message: 'OTP sent to +91' + phone,
       data: {
         phone: user.phone,
-        otp: otp,
         expiresIn: '10 minutes',
+        ...(isProduction ? {} : { otp }),
       },
     });
   } catch (error) {
@@ -584,7 +587,7 @@ exports.resetPassword = async (req, res) => {
       });
     }
 
-    const user = await user.findOne({ phone }).select('+resetPasswordToken +resetPasswordExpire +password');
+    const user = await User.findOne({ phone }).select('+resetPasswordToken +resetPasswordExpire +password');
 
     if (!user) {
       return res.status(404).json({

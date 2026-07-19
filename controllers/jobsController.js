@@ -311,7 +311,11 @@ exports.createJob = async (req, res) => {
       amenities:amenityObjectIds,
       postedBy: req.user.id,
       isActive: true,
-      approvalStatus: 'pending'
+      // Jobs are auto-approved now (no admin review workflow) — admin-created
+      // jobs go live immediately, matching the app backend's behavior.
+      approvalStatus: 'approved',
+      approvedBy: req.user.id,
+      approvedAt: new Date(),
     });
 
     res.status(201).json({

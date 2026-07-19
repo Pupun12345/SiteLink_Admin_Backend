@@ -1,21 +1,17 @@
 const mongoose = require('mongoose');
 
-const normalizePlan = (plan) => {
-  const normalized = String(plan || '').toLowerCase().trim();
-  if (normalized === 'worker' || normalized === 'premium' || normalized === 'worker_premium') return 'worker_premium';
-  if (normalized === 'vendorbasic' || normalized === 'basic' || normalized === 'vendor_basic') return 'vendor_basic';
-  if (normalized === 'vendorpremium' || normalized === 'vendor_premium') return 'vendor_premium';
-  return normalized;
-};
-
+// Schema is shared with the app backend (SiteLink_Backend/models/Subscription.js)
+// — both services read/write the same `subscriptions` collection, so the
+// field names/enums must stay identical.
 const subscriptionSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
   },
-  planType: {
+  plan: {
     type: String,
+    enum: ['vendor_basic', 'vendor_premium', 'worker'],
     required: true,
   },
   status: {

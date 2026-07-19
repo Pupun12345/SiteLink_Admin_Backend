@@ -31,6 +31,14 @@ const planDetailsSchema = new mongoose.Schema({
         type: [String],
         default: [],
     },
+    // Total workers a vendor on this plan can post across ALL their jobs.
+    // 0 = no cap configured. Must stay in sync with the app backend's
+    // PlanDetails schema (SiteLink_Backend/models/PlanDetails.js).
+    maxWorkers: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
     isActive: {
         type: Boolean,
         default: true,

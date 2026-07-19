@@ -5,16 +5,12 @@ const {
   createPost,
   likeUnlikePost,
   deletePost,
-  getPendingJobs,
-  approveJob,
-  rejectJob,
-  autoApproveJobs,
   addComment,
   updateComment,
   deleteComment,
   getCommentsByPost,
 } = require('../controllers/communityController');
-const { protect, adminOnly } = require('../middleware/auth');
+const { protect } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 
 // GET community feed
@@ -28,11 +24,8 @@ router.put('/posts/:postId/like', protect, likeUnlikePost);
 // DELETE post
 router.delete('/posts/:postId', protect, deletePost);
 
-// Legacy job-only approval routes
-router.get('/jobs/pending', protect, adminOnly, getPendingJobs);
-router.put('/jobs/:jobId/approve', protect, adminOnly, approveJob);
-router.put('/jobs/:jobId/reject', protect, adminOnly, rejectJob);
-router.post('/jobs/auto-approve', autoApproveJobs);
+// NOTE: job approve/reject/auto-approve routes removed — vendor jobs are
+// auto-approved at creation in the app backend now (no admin review step).
 
 // Comment routes
 router.post('/posts/:id/comments', protect, addComment);

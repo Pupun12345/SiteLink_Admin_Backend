@@ -12,7 +12,8 @@ const { protect, adminOnly } = require('../middleware/auth');
 const router = express.Router();
 
 router.post('/login', adminUserLogin);
-router.get('/profile', getAdminUserProfile);
+// Profile needs an authenticated admin (reads req.user) — was unprotected.
+router.get('/profile', protect, getAdminUserProfile);
 
 router.use(protect);
 router.use(adminOnly);
