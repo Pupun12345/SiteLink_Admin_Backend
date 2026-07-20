@@ -9,7 +9,7 @@ const resetPassword = async () => {
     await mongoose.connect(process.env.MONGO_URI || process.env.MONGODB_URI);
     console.log('✅ Connected to MongoDB\n');
 
-    const email = 'admin@sitelink.in';
+    const email = 'admin@sitelink.com';
     const newPassword = 'Admin@123'; // Change this to your desired password
 
     console.log('Resetting password for:', email);

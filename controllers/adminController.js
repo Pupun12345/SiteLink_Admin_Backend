@@ -93,7 +93,7 @@ exports.getWorkerDetails = async (req, res) => {
     }
 
     const worker = await User.findById(id).select(
-      'name age phone experience city dailyRate profileImage aadhaarFrontImage aadhaarBackImage medicalCertificate certificates verificationStatus verificationStatus skills userType adminRating adminRatingComment ratedAt subscription'
+      'name age phone experience city dailyRate profileImage aadhaarFrontImage aadhaarBackImage medicalCertificate certificates verificationStatus verificationStatus skills userType adminRating adminRatingComment ratedAt subscription isBlocked'
     );
 
     if (!worker || worker.userType !== 'worker') {
@@ -391,7 +391,7 @@ exports.getPendingVendors = async (req, res) => {
     const vendors = await User.find({
       userType: 'vendor',
       verificationStatus: 'pending',
-    }).select('companyName name phone city companyLogo verificationStatus createdAt email gstNumber whatsappNumber website subsciption panNumber gstCertificate panCardImage');
+    }).select('companyName name phone city companyLogo verificationStatus createdAt email gstNumber whatsappNumber website subsciption panNumber gstCertificate panCardImage isBlocked');
 
     return res.json({
       success: true,
@@ -415,7 +415,7 @@ exports.getVendors = async (req, res) => {
     }
 
     const vendors = await User.find(query).select(
-      'companyName name phone city companyLogo verificationStatus createdAt email gstNumber adminRating profileImage whatsappNumber website role workArea workState subscitption panNumber gstCertificate panCardImage'
+      'companyName name phone city companyLogo verificationStatus createdAt email gstNumber adminRating profileImage whatsappNumber website role workArea workState subscitption panNumber gstCertificate panCardImage isBlocked'
     );
 
     return res.json({
@@ -440,7 +440,7 @@ exports.getVendorDetails = async (req, res) => {
     }
 
     const vendor = await User.findById(id).select(
-      'companyName name phone email city gstNumber companyLogo verificationStatus verificationStatus userType adminRating adminRatingComment ratedAt whatsappNumber website role workArea workState profileImage subscription panNumber gstCertificate panCardImage'
+      'companyName name phone email city gstNumber companyLogo verificationStatus verificationStatus userType adminRating adminRatingComment ratedAt whatsappNumber website role workArea workState profileImage subscription panNumber gstCertificate panCardImage isBlocked'
     );
 
     if (!vendor || vendor.userType !== 'vendor') {
@@ -615,9 +615,9 @@ exports.getAllUsers = async (req, res) => {
       .select(`
         name email phone userType verificationStatus createdAt
         profileImage companyName companyLogo city workState
-        role website experience adminRating
+        role website experience adminRating isBlocked
         workArea gstNumber whatsappNumber primarySkill
-        skills willingtoRelocate salaryType salary dateOfBirth gender subscription panNumber gstCertificate panCardImage experienceCertificate
+        skills willingtoRelocate salaryType salary dateOfBirth gender subscription panNumber gstCertificate panCardImage experienceCertificate 
       `)
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -637,6 +637,7 @@ exports.getAllUsers = async (req, res) => {
         workState: user.workState,
         adminRating: user.adminRating,
         subsciption: user.subscription,
+        isBlocked: user.isBlocked,
         verificationStatus:
           user.verificationStatus?.charAt(0).toUpperCase() +
           user.verificationStatus?.slice(1),
@@ -698,6 +699,34 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
+// Toggle block/unblock user (admin only)
+exports.toggleBlockUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ success: false, message: 'Invalid user ID format' });
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    user.isBlocked = !user.isBlocked;
+    await user.save({ validateModifiedOnly: true });
+
+    return res.json({
+      success: true,
+      message: `User ${user.isBlocked ? 'blocked' : 'unblocked'} successfully`,
+      data: { id: user._id, isBlocked: user.isBlocked },
+    });
+  } catch (error) {
+    console.error('toggleBlockUser error:', error);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
 // GET ALL VENDORS AND WORKERS
 exports.getAllWorkersAndVendors = async (req, res) => {
   try {
@@ -721,7 +750,7 @@ exports.getAllWorkersAndVendors = async (req, res) => {
         profileImage companyName companyLogo city workState
         role website experience adminRating
         workArea gstNumber whatsappNumber primarySkill
-        skills willingtoRelocate salaryType salary subscription panNumber gstCertificate panCardImage experienceCertificate
+        skills willingtoRelocate salaryType salary subscription panNumber gstCertificate panCardImage experienceCertificate isBlocked
       `)
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -753,6 +782,7 @@ exports.getAllWorkersAndVendors = async (req, res) => {
             year: "numeric",
           })
           : "",
+        isBlocked:user.isBlocked
       };
 
       if (user.userType === "vendor") {
@@ -871,6 +901,7 @@ exports.getUserDetails = async (req, res) => {
         adminRating: regularUser.adminRating,
         adminRatingComment: regularUser.adminRatingComment,
         ratedAt: regularUser.ratedAt ? new Date(regularUser.ratedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null,
+        isBlocked:regularUser.isBlocked
 
       }
       : {
@@ -909,7 +940,8 @@ exports.getUserDetails = async (req, res) => {
             type: 'IDENTITY PROOF',
             url: regularUser.panCardImage,
           }
-        ]
+        ],
+        isBlocked:regularUser.isBlocked
       };
 
     return res.json({
