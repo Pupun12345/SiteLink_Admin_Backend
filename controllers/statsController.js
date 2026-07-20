@@ -496,11 +496,11 @@ exports.getYearData = async (req, res) => {
 
 exports.getSubscriptionStats = async (req, res) => {
     try {
-        const subscriptions = await Subscription.find().populate('user', 'name userType companyName companyLogo profileImage').select('user planType status amount startDate endDate ');
+        const subscriptions = await Subscription.find().populate('user', 'name userType companyName companyLogo profileImage').select('user plan status amount startDate endDate ');
 
         const totalSubscriptions = subscriptions.length;
-        const totalPremiumVendorSubscriptions = subscriptions.filter(sub => sub.planType === 'premium' && sub.user?.userType === 'vendor').length;
-        const totalBasicVendorSubscriptions = subscriptions.filter(sub => sub.planType === 'basic' && sub.user?.userType === 'vendor').length;
+        const totalPremiumVendorSubscriptions = subscriptions.filter(sub => sub.plan === 'vendor_premium').length;
+        const totalBasicVendorSubscriptions = subscriptions.filter(sub => sub.plan === 'vendor_basic').length;
         const totalWorkerSubscriptions = subscriptions.filter(sub => sub.user?.userType === 'worker').length;
         const totalVendorSubscriptions = subscriptions.filter(sub => sub.user?.userType === 'vendor').length;
         const totalRevenue = subscriptions.reduce((sum, sub) => sum + (sub.amount || 0), 0);

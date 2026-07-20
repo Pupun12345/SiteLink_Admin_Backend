@@ -4,13 +4,22 @@ const Subscription = require('../models/Subscription');
 const jobPost = require('../models/job');
 const Post = require('../models/Post');
 
+// Plan key → display config. (Pehle yahan Subscription.getPlanConfig call hota
+// tha jo model par exist hi nahi karta — har subscribed user par 500 aata tha.)
+const PLAN_CONFIG = {
+  vendor_basic: { label: 'Vendor Basic', userType: 'vendor', planType: 'basic' },
+  vendor_premium: { label: 'Vendor Premium', userType: 'vendor', planType: 'premium' },
+  worker: { label: 'Worker Premium', userType: 'worker', planType: 'premium' },
+  worker_premium: { label: 'Worker Premium', userType: 'worker', planType: 'premium' },
+};
+
 const getSubscriptionPlanDetails = (plan) => {
   const normalizedPlan = String(plan || '').toLowerCase().trim();
-  return Subscription.getPlanConfig(normalizedPlan) || {
+  return PLAN_CONFIG[normalizedPlan] || {
     label: 'Unknown Plan',
     amount: 0,
     userType: 'unknown',
-    frequency: 'unknown',
+    planType: 'unknown',
   };
 };
 
@@ -60,7 +69,7 @@ exports.getAllSubscriptions = async (req, res) => {
         email: sub.email,
         planKey: normalizedPlan || 'unknown',
         planName: planDetails.label || 'Unknown Plan',
-        planType: planDetails.userType === 'worker' ? 'premium' : planDetails.label?.includes('Basic') ? 'basic' : 'premium',
+        planType: planDetails.planType,
         status: subscription?.status || 'active',
         startDate: subscription?.startDate,
         endDate: subscription?.endDate,

@@ -37,10 +37,11 @@ exports.getPlans = async (req, res) => {
 
 exports.createPlan = async (req, res) => {
     try {
-        const { planName, userType, planType, frequency, amount, features } = req.body;
+        const { planName, userType, planType, frequency, amount, features, maxWorkers } = req.body;
         if (!planName || !userType || !planType || !frequency || amount === undefined) {
             return res.status(400).json({ success: false, message: 'planName, userType, planType, frequency and amount are required' });
         }
+        const parsedMaxWorkers = Math.max(parseInt(maxWorkers, 10) || 0, 0);
         const plan = await planDetails.create({
             planName: planName.trim(),
             userType,
@@ -48,6 +49,7 @@ exports.createPlan = async (req, res) => {
             frequency,
             amount: parseFloat(amount),
             features: Array.isArray(features) ? features.filter(f => f.trim()) : [],
+            maxWorkers: parsedMaxWorkers,
             isActive: true,
         });
         return res.status(201).json({ success: true, message: 'Plan created successfully', data: plan });
@@ -59,7 +61,7 @@ exports.createPlan = async (req, res) => {
 exports.editPlanAmount = async (req, res) => {
     try {
         const { id } = req.params;
-        const { planName, userType, planType, frequency, amount, features } = req.body;
+        const { planName, userType, planType, frequency, amount, features, maxWorkers } = req.body;
 
         const plan = await planDetails.findById(id);
         if (!plan) return res.status(404).json({ success: false, message: 'Plan not found' });
@@ -70,6 +72,7 @@ exports.editPlanAmount = async (req, res) => {
         if (frequency !== undefined) plan.frequency = frequency;
         if (amount !== undefined) plan.amount = parseFloat(amount);
         if (features !== undefined) plan.features = Array.isArray(features) ? features.filter(f => f.trim()) : [];
+        if (maxWorkers !== undefined) plan.maxWorkers = Math.max(parseInt(maxWorkers, 10) || 0, 0);
 
         await plan.save();
         return res.status(200).json({ success: true, message: 'Plan updated successfully', data: plan });
