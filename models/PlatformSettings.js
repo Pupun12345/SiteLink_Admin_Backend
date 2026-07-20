@@ -19,6 +19,15 @@ const platformSettingsSchema = new mongoose.Schema({
     }
   },
   language: { type: String, default: 'English (United States)' },
+  supportContact: {
+    phone: { type: String, default: '' },
+    whatsapp: { type: String, default: '' },
+    email: { type: String, default: '' },
+    hoursWeekday: { type: String, default: '' },
+    hoursSunday: { type: String, default: '' },
+    emergencyNote: { type: String, default: '' },
+    avgResponseTime: { type: String, default: '' },
+  },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   updatedAt: { type: Date, default: Date.now }
 }, {
@@ -69,6 +78,18 @@ platformSettingsSchema.methods.updateNotifications = async function (notificatio
 // Instance method to update language
 platformSettingsSchema.methods.updateLanguage = async function (language, updatedBy) {
   this.language = language;
+  this.updatedBy = updatedBy;
+  this.updatedAt = new Date();
+  await this.save();
+  return this;
+};
+
+// Instance method to update support contact info (app's Contact Support screen)
+platformSettingsSchema.methods.updateSupportContact = async function (supportContact, updatedBy) {
+  this.supportContact = {
+    ...this.supportContact,
+    ...supportContact
+  };
   this.updatedBy = updatedBy;
   this.updatedAt = new Date();
   await this.save();

@@ -255,6 +255,7 @@ exports.getSettings = async (req, res) => {
                 notifications: settings.notifications,
                 verificationRules: settings.verificationRules,
                 language: settings.language,
+                supportContact: settings.supportContact,
                 skills: skills,
                 updatedAt: settings.updatedAt,
                 updatedBy: settings.updatedBy
@@ -269,6 +270,40 @@ exports.getSettings = async (req, res) => {
         });
     }
 }
+
+exports.updateSupportContact = async (req, res) => {
+    try {
+        const { phone, whatsapp, email, hoursWeekday, hoursSunday, emergencyNote, avgResponseTime } = req.body;
+
+        const settings = await PlatformSettings.getOrCreateSettings();
+        await settings.updateSupportContact({
+            phone, whatsapp, email, hoursWeekday, hoursSunday, emergencyNote, avgResponseTime
+        }, req.user.id);
+
+        try {
+            await createAdminNotification(
+                'Support Contact Updated',
+                `App "Contact Support" details have been updated by ${req.user.name}`,
+                req.user.id
+            );
+        } catch (notificationError) {
+            console.warn('Failed to create notification:', notificationError.message);
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: 'Support contact updated successfully',
+            supportContact: settings.supportContact
+        });
+    } catch (error) {
+        console.error('Update support contact error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+            error: error.message
+        });
+    }
+};
 
 exports.addSkill = async (req, res) => {
     try {

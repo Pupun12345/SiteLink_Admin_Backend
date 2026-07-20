@@ -9,6 +9,7 @@ const {
   languageSettings,
   getSettings,
   addSkill,
+  updateSupportContact,
 } = require('../controllers/platformSettingController');
 const { protect } = require('../middleware/auth');
 
@@ -33,6 +34,7 @@ router.delete('/plans/:id', deletePlan);
 router.put('/notifications', notificationSettings);
 router.put('/verification-rules', verificationRulesSettings);
 router.put('/language', languageSettings);
+router.put('/support-contact', updateSupportContact);
 router.post('/skills', addSkill);
 
 module.exports = router;
