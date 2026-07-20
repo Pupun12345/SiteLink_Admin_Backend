@@ -180,6 +180,10 @@ const userSchema = new mongoose.Schema({
     default: null,
   },
   //common-fields
+  isBlocked: {
+    type: Boolean,
+    default: false,
+  },
   subscription: {
     type: Boolean,
     default: false

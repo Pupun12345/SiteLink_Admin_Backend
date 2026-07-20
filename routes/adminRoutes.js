@@ -19,6 +19,7 @@ const {
   addSkillsToWorker,
   removeSkillFromWorker,
   getAllSubscriptions,
+  toggleBlockUser,
 } = require('../controllers/adminController');
 const { protect, adminOnly } = require('../middleware/auth');
 
@@ -41,6 +42,7 @@ router.put('/users/:id/rate', rateWorker);
 router.put('/users/:id/suspend', (req, res) => res.status(501).json({ success: false, message: 'Not implemented yet' }));
 router.put('/users/:id/ban', (req, res) => res.status(501).json({ success: false, message: 'Not implemented yet' }));
 router.put('/users/:id/activate', verifyWorker);
+router.put('/users/:id/block', toggleBlockUser);
 router.delete('/users/:id', deleteUser);
 
 // Admin-only worker verification endpoints
