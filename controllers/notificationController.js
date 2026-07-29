@@ -1,6 +1,7 @@
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const Job = require('../models/job');
+const notifyUser = require('../utils/notifyUser');
 
 // @desc    Get all notifications with filtering and pagination
 // @route   GET /api/notifications
@@ -200,8 +201,35 @@ exports.createNotification = async (req, res) => {
     }
 
     const notification = await Notification.create(notificationData);
-    
+
     await notification.populate('createdBy', 'name email');
+
+    // Admin dashboard record ke alawa — agar worker/vendor/all/specific
+    // recipients target kiye hain to unhe real device push + in-app Alerts
+    // tab entry bhi bhejo (isse pehle sirf admin panel ke andar record
+    // banta tha, kisi user ke phone par kabhi kuch nahi jaata tha).
+    (async () => {
+      try {
+        let targetIds = [];
+        if (Array.isArray(recipients) && recipients.length) {
+          targetIds = recipients;
+        } else if (recipientType === 'worker' || recipientType === 'vendor') {
+          const users = await User.find({ userType: recipientType }).select('_id');
+          targetIds = users.map((u) => u._id);
+        } else if (recipientType === 'all') {
+          const users = await User.find({ userType: { $in: ['worker', 'vendor'] } }).select('_id');
+          targetIds = users.map((u) => u._id);
+        }
+
+        await Promise.all(
+          targetIds.map((id) =>
+            notifyUser(id, { title, body: message, type: 'general' })
+          )
+        );
+      } catch (e) {
+        console.error('[createNotification] push fan-out failed:', e.message);
+      }
+    })();
 
     res.status(201).json({
       success: true,

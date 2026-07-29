@@ -3,6 +3,7 @@ const PlatformSettings = require('../models/PlatformSettings');
 const Subscription = require('../models/Subscription');
 const jobPost = require('../models/job');
 const Post = require('../models/Post');
+const notifyUser = require('../utils/notifyUser');
 
 // Plan key → display config. (Pehle yahan Subscription.getPlanConfig call hota
 // tha jo model par exist hi nahi karta — har subscribed user par 500 aata tha.)
@@ -204,6 +205,13 @@ exports.verifyWorker = async (req, res) => {
 
     await user.save({ validateModifiedOnly: true });
 
+    notifyUser(user._id, {
+      type: user.userType === 'vendor' ? 'vendor_verified' : 'worker_verified',
+      title: 'Profile Verified',
+      body: 'Your profile has been verified. You now have full access.',
+      data: {},
+    }).catch((e) => console.error('[verifyWorker] notifyUser failed:', e.message));
+
     return res.json({
       success: true,
       message: `${user.userType.charAt(0).toUpperCase() + user.userType.slice(1)} verified successfully`,
@@ -246,6 +254,13 @@ exports.rejectWorker = async (req, res) => {
     user.verificationReviewedAt = new Date();
 
     await user.save({ validateModifiedOnly: true });
+
+    notifyUser(user._id, {
+      type: user.userType === 'vendor' ? 'vendor_rejected' : 'worker_rejected',
+      title: 'Verification Rejected',
+      body: `Your profile verification was rejected: ${user.verificationRejectedReason}`,
+      data: {},
+    }).catch((e) => console.error('[rejectWorker] notifyUser failed:', e.message));
 
     return res.json({
       success: true,
@@ -496,6 +511,13 @@ exports.verifyVendor = async (req, res) => {
 
     await vendor.save({ validateModifiedOnly: true });
 
+    notifyUser(vendor._id, {
+      type: 'vendor_verified',
+      title: 'Vendor Verified',
+      body: 'Your company profile has been verified. You now have full access.',
+      data: {},
+    }).catch((e) => console.error('[verifyVendor] notifyUser failed:', e.message));
+
     return res.json({
       success: true,
       message: 'Vendor verified successfully',
@@ -538,6 +560,13 @@ exports.rejectVendor = async (req, res) => {
     vendor.verificationReviewedAt = new Date();
 
     await vendor.save({ validateModifiedOnly: true });
+
+    notifyUser(vendor._id, {
+      type: 'vendor_rejected',
+      title: 'Vendor Verification Rejected',
+      body: `Your company profile verification was rejected: ${vendor.verificationRejectedReason}`,
+      data: {},
+    }).catch((e) => console.error('[rejectVendor] notifyUser failed:', e.message));
 
     return res.json({
       success: true,
