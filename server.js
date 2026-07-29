@@ -77,9 +77,14 @@ app.use((req, res) => {
 // Error handler
 app.use(errorHandler);
 
-// Start server
+// Start server only after DB is connected — pehle listen() chalu ho jaata
+// tha aur connectDB() background me (bina await ke), isliye server start
+// hote hi jo pehla API request aata tha wo DB connect hone se pehle hi
+// aa jaata tha aur fail ho jaata tha; dobara try karne tak connection ban
+// chuka hota tha isliye wo chal jaata tha.
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  connectDB();
+connectDB().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
 });
