@@ -33,8 +33,6 @@ router.use(adminOnly);
 // Admin-only user management
 router.get('/users', getAllUsers);
 router.get("/vendor-worker",getAllWorkersAndVendors);
-router.get('/users/:id', getUserDetails);
-router.put('/users/:id', updateUserDetails);
 router.get('/subscriptions',getAllSubscriptions);
 router.put('/users/:id/verify', verifyWorker);
 router.put('/users/:id/reject', rejectWorker);
@@ -43,6 +41,8 @@ router.put('/users/:id/suspend', (req, res) => res.status(501).json({ success: f
 router.put('/users/:id/ban', (req, res) => res.status(501).json({ success: false, message: 'Not implemented yet' }));
 router.put('/users/:id/activate', verifyWorker);
 router.put('/users/:id/block', toggleBlockUser);
+router.get('/users/:id', getUserDetails);
+router.put('/users/:id', updateUserDetails);
 router.delete('/users/:id', deleteUser);
 
 // Admin-only worker verification endpoints
