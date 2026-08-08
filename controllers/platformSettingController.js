@@ -349,3 +349,40 @@ exports.addSkill = async (req, res) => {
         });
     }
 };
+
+exports.deleteSkill = async (req, res) => {
+    try {
+        const { skill } = req.params;
+
+        if (!skill || !skill.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: 'Skill name is required'
+            });
+        }
+
+        const existingSkill = await Skill.findOne({ name: skill.trim() });
+        if (existingSkill) {
+            await Skill.deleteOne({ name: skill.trim() });
+            const allSkills = await Skill.find().sort({ id: 1 });
+            return res.status(200).json({
+                success: true,
+                message: 'Skill deleted successfully',
+                skills: allSkills
+            });
+        } else {
+            return res.status(404).json({
+                success: false,
+                message: 'Skill not found'
+            });
+        }
+    } catch (error) {
+        console.error('Delete skill error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+            error: error.message
+        });
+    }
+};
+
