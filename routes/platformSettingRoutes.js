@@ -11,6 +11,7 @@ const {
   addSkill,
   deleteSkill,
   updateSupportContact,
+  updateMaintenance,
 } = require('../controllers/platformSettingController');
 const { protect } = require('../middleware/auth');
 
@@ -36,6 +37,7 @@ router.put('/notifications', notificationSettings);
 router.put('/verification-rules', verificationRulesSettings);
 router.put('/language', languageSettings);
 router.put('/support-contact', updateSupportContact);
+router.put('/maintenance', updateMaintenance);
 router.post('/skills', addSkill);
 router.delete('/delete-skills/:skill', deleteSkill);
 
