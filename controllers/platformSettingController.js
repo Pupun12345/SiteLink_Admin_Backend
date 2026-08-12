@@ -256,6 +256,7 @@ exports.getSettings = async (req, res) => {
                 verificationRules: settings.verificationRules,
                 language: settings.language,
                 supportContact: settings.supportContact,
+                maintenance: settings.maintenance,
                 skills: skills,
                 updatedAt: settings.updatedAt,
                 updatedBy: settings.updatedBy
@@ -297,6 +298,60 @@ exports.updateSupportContact = async (req, res) => {
         });
     } catch (error) {
         console.error('Update support contact error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+            error: error.message
+        });
+    }
+};
+
+// Maintenance mode — app ke dashboard par info dialog on/off karta hai.
+// App ise public endpoint (user backend ka GET /api/app-config) se padhta hai.
+exports.updateMaintenance = async (req, res) => {
+    try {
+        const { enabled, title, message, until } = req.body;
+
+        if (typeof enabled !== 'boolean') {
+            return res.status(400).json({
+                success: false,
+                message: 'enabled (true/false) is required'
+            });
+        }
+
+        // On karte waqt message zaroori hai — warna user ko khaali dialog dikhega
+        if (enabled && !(message && message.trim())) {
+            return res.status(400).json({
+                success: false,
+                message: 'Message is required when maintenance mode is enabled'
+            });
+        }
+
+        const settings = await PlatformSettings.getOrCreateSettings();
+        await settings.updateMaintenance({
+            enabled,
+            title: (title && title.trim()) || 'Under Maintenance',
+            message: (message || '').trim(),
+            until: until ? new Date(until) : null,
+        }, req.user.id);
+
+        try {
+            await createAdminNotification(
+                enabled ? 'Maintenance Mode Enabled' : 'Maintenance Mode Disabled',
+                `App maintenance mode has been turned ${enabled ? 'ON' : 'OFF'} by ${req.user.name}`,
+                req.user.id
+            );
+        } catch (notificationError) {
+            console.warn('Failed to create notification:', notificationError.message);
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: `Maintenance mode ${enabled ? 'enabled' : 'disabled'} successfully`,
+            maintenance: settings.maintenance
+        });
+    } catch (error) {
+        console.error('Update maintenance error:', error);
         return res.status(500).json({
             success: false,
             message: 'Internal server error',

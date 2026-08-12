@@ -28,6 +28,18 @@ const platformSettingsSchema = new mongoose.Schema({
     emergencyNote: { type: String, default: '' },
     avgResponseTime: { type: String, default: '' },
   },
+  // App maintenance notice — admin panel se on/off hota hai. Enabled hone par
+  // app dashboard par ek info dialog dikhata hai (user dismiss kar sakta hai,
+  // app band nahi hoti).
+  maintenance: {
+    enabled: { type: Boolean, default: false },
+    title: { type: String, default: 'Under Maintenance' },
+    message: { type: String, default: '' },
+    // Kab tak chalega (optional) — app "till <time>" line dikhata hai.
+    until: { type: Date, default: null },
+    // Message badalne par app dobara dialog dikha sake, isliye alag stamp.
+    updatedAt: { type: Date, default: Date.now },
+  },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   updatedAt: { type: Date, default: Date.now }
 }, {
@@ -89,6 +101,21 @@ platformSettingsSchema.methods.updateSupportContact = async function (supportCon
   this.supportContact = {
     ...this.supportContact,
     ...supportContact
+  };
+  this.updatedBy = updatedBy;
+  this.updatedAt = new Date();
+  await this.save();
+  return this;
+};
+
+// Instance method to update maintenance notice (app dashboard dialog)
+platformSettingsSchema.methods.updateMaintenance = async function (maintenance, updatedBy) {
+  const current = this.maintenance ? this.maintenance.toObject?.() ?? this.maintenance : {};
+  this.maintenance = {
+    ...current,
+    ...maintenance,
+    // App isi stamp se decide karta hai ki naya notice dobara dikhana hai
+    updatedAt: new Date(),
   };
   this.updatedBy = updatedBy;
   this.updatedAt = new Date();
