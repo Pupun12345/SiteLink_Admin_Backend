@@ -768,9 +768,9 @@ exports.toggleBlockUser = async (req, res) => {
 // GET ALL VENDORS AND WORKERS
 exports.getAllWorkersAndVendors = async (req, res) => {
   try {
-    const { userType, status, page = 1, limit = 10 } = req.query;
+    const { userType, status, page = 1, limit = 10, startDate, endDate } = req.query;
 
-    const query = {};
+    const query = { userType: { $in: ['worker', 'vendor'] } };
 
     if (userType && userType !== "all") {
       query.userType = userType;
@@ -778,6 +778,14 @@ exports.getAllWorkersAndVendors = async (req, res) => {
 
     if (status && status !== "all") {
       query.verificationStatus = status;
+    }
+
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      query.createdAt = { $gte: start, $lte: end };
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -1008,7 +1016,7 @@ exports.updateUserDetails = async (req, res) => {
     }
 
     // Update allowed fields based on user type
-    let allowedFields = ['name', 'email', 'phone', 'workCity', 'workState', 'location', 'role', 'primarySkill',
+    let allowedFields = ['name', 'email', 'phone', 'workState', 'location', 'role', 'primarySkill',
       'experience', 'salary', 'salaryType', 'willingtoRelocate'];
 
     if (user.userType === 'vendor') {
@@ -1017,7 +1025,6 @@ exports.updateUserDetails = async (req, res) => {
 
     allowedFields.forEach(field => {
       if (updates[field] !== undefined && updates[field] !== null) {
-        // Special handling for willingtoRelocate boolean
         if (field === 'willingtoRelocate') {
           user[field] = updates[field] === true || updates[field] === 'true';
         } else {
@@ -1025,6 +1032,11 @@ exports.updateUserDetails = async (req, res) => {
         }
       }
     });
+
+    // workCity maps to the 'city' field in the User model
+    if (updates.workCity !== undefined && updates.workCity !== null) {
+      user.city = updates.workCity;
+    }
 
     await user.save({ validateModifiedOnly: true });
 
@@ -1073,5 +1085,68 @@ exports.deleteUser = async (req, res) => {
       success: false,
       message: 'Server error',
     });
+  }
+};
+
+// Get jobs report with day-wise breakdown (admin only)
+exports.getJobsReport = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ success: false, message: 'startDate and endDate are required' });
+    }
+
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid date format' });
+    }
+
+    const jobs = await jobPost.find({
+      createdAt: { $gte: start, $lte: end },
+    }).select('title company location status salary salaryType experience isUrgent createdAt postedBy').lean();
+
+    // Build day-wise map
+    const dayMap = {};
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      const key = cursor.toISOString().split('T')[0];
+      dayMap[key] = { date: key, total: 0, open: 0, filled: 0, closed: 0, cancelled: 0 };
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    jobs.forEach(job => {
+      const key = new Date(job.createdAt).toISOString().split('T')[0];
+      if (dayMap[key]) {
+        dayMap[key].total += 1;
+        const s = (job.status || 'Open').toLowerCase();
+        if (s === 'open') dayMap[key].open += 1;
+        else if (s === 'filled') dayMap[key].filled += 1;
+        else if (s === 'closed') dayMap[key].closed += 1;
+        else if (s === 'cancelled') dayMap[key].cancelled += 1;
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        jobs,
+        dayWise: Object.values(dayMap),
+        summary: {
+          total: jobs.length,
+          open: jobs.filter(j => (j.status || 'Open').toLowerCase() === 'open').length,
+          filled: jobs.filter(j => (j.status || '').toLowerCase() === 'filled').length,
+          closed: jobs.filter(j => (j.status || '').toLowerCase() === 'closed').length,
+          cancelled: jobs.filter(j => (j.status || '').toLowerCase() === 'cancelled').length,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('getJobsReport error:', error);
+    return res.status(500).json({ success: false, message: 'Server error' });
   }
 };

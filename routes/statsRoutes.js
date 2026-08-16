@@ -7,7 +7,8 @@ const {
     getYearData,
     getRecentActivity,
     revenueStats,
-    getSubscriptionStats
+    getSubscriptionStats,
+    getRevenueReport
 } = require('../controllers/statsController');
 const { protect, adminOnly } = require('../middleware/auth');
 
@@ -22,5 +23,6 @@ router.get('/year-data', protect, adminOnly, getYearData);
 router.get('/recent-activity', protect, adminOnly, getRecentActivity);
 router.get('/revenue-stats',protect, adminOnly, revenueStats);
 router.get('/revenue-stats/subscriptions', protect, adminOnly, getSubscriptionStats);
+router.get('/revenue-stats/report', protect, adminOnly, getRevenueReport);
 
 module.exports = router;
