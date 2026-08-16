@@ -74,11 +74,31 @@ exports.getCommunityFeed = async (req, res) => {
 exports.createPost = async (req, res) => {
   try {
     const { content, feeling } = req.body;
-    const userId = req.user._id;
-    const user = await User.findById(userId);
+    const isAdmin = req.user.userType === 'admin' || !!req.user.permissions;
 
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
+    // For admin users req.user is an AdminUser doc (no User collection entry)
+    let posterName, posterImage, posterType, companyName, verification, postedById;
+
+    if (isAdmin) {
+      posterName = req.user.name || 'SiteLink Admin';
+      posterImage = req.user.profileImage || null;
+      posterType = 'admin';
+      companyName = 'SiteLink';
+      verification = 'verified';
+      // Use a placeholder ObjectId so postedBy is always set;
+      // we store the real admin id but it won't populate from User collection
+      postedById = req.user._id;
+    } else {
+      const user = await User.findById(req.user._id);
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+      posterName = user.name;
+      posterImage = user.profileImage;
+      posterType = user.userType;
+      companyName = user.companyName || user.ownerName || null;
+      verification = user.verificationStatus || 'unverified';
+      postedById = user._id;
     }
 
     const images = req.files?.images
@@ -89,47 +109,41 @@ exports.createPost = async (req, res) => {
       ? req.files.video[0].path
       : null;
 
-    const postData = {
+    const post = await Post.create({
       content,
       feeling: feeling || null,
-      postedBy: userId,
-      posterName: user.name,
-      posterImage: user.profileImage,
-      posterType: user.userType,
-      companyName: user.companyName || user.ownerName || null,
+      postedBy: postedById,
+      posterName,
+      posterImage,
+      posterType,
+      companyName,
       images,
       video,
-      verification: user.verificationStatus || "unverified",
-      approvalStatus: "approved",
+      verification,
+      approvalStatus: 'approved',
       approvedAt: new Date(),
-    };
-
-    const post = await Post.create(postData);
-
-    const populatedPost = await Post.findById(post._id)
-      .populate('postedBy', 'name profileImage')
-      .populate('likes.userId', 'name');
+    });
 
     res.status(201).json({
       success: true,
       message: 'Post created successfully',
       data: {
-        _id: populatedPost._id,
-        content: populatedPost.content,
-        images: populatedPost.images,
-        video: populatedPost.video,
-        feeling: populatedPost.feeling,
-        posterName: populatedPost.posterName,
-        posterImage: populatedPost.posterImage,
-        posterType: populatedPost.posterType,
-        companyName: populatedPost.companyName,
-        verification: populatedPost.verification,
-        likesCount: populatedPost.likesCount,
-        commentsCount: populatedPost.commentsCount,
-        createdAt: populatedPost.createdAt,
-        likes: populatedPost.likes,
-        approvalStatus: populatedPost.approvalStatus,
-        approvedAt: populatedPost.approvedAt
+        _id: post._id,
+        content: post.content,
+        images: post.images,
+        video: post.video,
+        feeling: post.feeling,
+        posterName: post.posterName,
+        posterImage: post.posterImage,
+        posterType: post.posterType,
+        companyName: post.companyName,
+        verification: post.verification,
+        likesCount: post.likesCount,
+        commentsCount: post.commentsCount,
+        createdAt: post.createdAt,
+        likes: [],
+        approvalStatus: post.approvalStatus,
+        approvedAt: post.approvedAt,
       },
     });
   } catch (error) {
@@ -210,7 +224,8 @@ exports.deletePost = async (req, res) => {
       });
     }
 
-    if (post.postedBy.toString() !== userId.toString() && req.user.userType !== 'admin') {
+    const isAdmin = req.user.userType === 'admin' || !!req.user.permissions;
+    if (post.postedBy.toString() !== req.user._id.toString() && !isAdmin) {
       return res.status(403).json({
         success: false,
         message: 'Unauthorized to delete this post',

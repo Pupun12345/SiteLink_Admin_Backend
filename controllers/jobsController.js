@@ -193,25 +193,29 @@ exports.createJob = async (req, res) => {
     const { title, company, location, latitude, longitude, quantity, salary, salaryType, isUrgent, duration, description, experience, amenities } = req.body;
 
     const user = await User.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
+    // Allow admin users (from AdminUser collection) to create jobs directly
+    const isAdmin = req.user.userType === 'admin' || !!req.user.permissions;
+    if (!isAdmin) {
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
 
-    if (!user.isVerified) {
-      return res.status(403).json({
-        success: false,
-        message: 'Account verification required for posting jobs. Please wait for your account to be verified before creating a job.'
-      });
-    }
+      if (!user.isVerified) {
+        return res.status(403).json({
+          success: false,
+          message: 'Account verification required for posting jobs. Please wait for your account to be verified before creating a job.'
+        });
+      }
 
-    if (user.userType === 'worker' || user.userType === 'customer') {
-      return res.status(403).json({
-        success: false,
-        message: 'Only Vendor or Admin can create jobs'
-      });
+      if (user.userType === 'worker' || user.userType === 'customer') {
+        return res.status(403).json({
+          success: false,
+          message: 'Only Vendor or Admin can create jobs'
+        });
+      }
     }
 
     if (!title || !company || !location || !description || !experience) {
