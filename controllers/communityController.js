@@ -15,13 +15,20 @@ exports.getCommunityFeed = async (req, res) => {
     const filter = {
       isActive: true,
       approvalStatus: "approved",
+      // Exclude admin timed posts that have expired
+      $or: [
+        { isAdminPost: { $ne: true } },
+        { isAdminPost: true, isPermanent: true },
+        { isAdminPost: true, expiresAt: null },
+        { isAdminPost: true, expiresAt: { $gt: new Date() } },
+      ],
     };
 
     const [posts, total] = await Promise.all([
       Post.find(filter)
         .populate("postedBy", "name profileImage")
         .populate("likes.userId", "name")
-        .sort({ createdAt: -1 })
+        .sort({ isAdminPost: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit),
 
@@ -85,8 +92,6 @@ exports.createPost = async (req, res) => {
       posterType = 'admin';
       companyName = 'SiteLink';
       verification = 'verified';
-      // Use a placeholder ObjectId so postedBy is always set;
-      // we store the real admin id but it won't populate from User collection
       postedById = req.user._id;
     } else {
       const user = await User.findById(req.user._id);
@@ -109,6 +114,19 @@ exports.createPost = async (req, res) => {
       ? req.files.video[0].path
       : null;
 
+    let isAdminPost = false;
+    let isPermanent = false;
+    let expiresAt = null;
+    if (isAdmin) {
+      isAdminPost = true;
+      const { postDuration } = req.body;
+      if (postDuration === 'permanent') {
+        isPermanent = true;
+      } else if (postDuration && !isNaN(Number(postDuration))) {
+        expiresAt = new Date(Date.now() + Number(postDuration) * 60 * 60 * 1000);
+      }
+    }
+
     const post = await Post.create({
       content,
       feeling: feeling || null,
@@ -122,6 +140,9 @@ exports.createPost = async (req, res) => {
       verification,
       approvalStatus: 'approved',
       approvedAt: new Date(),
+      isAdminPost,
+      isPermanent,
+      expiresAt,
     });
 
     res.status(201).json({
@@ -305,6 +326,34 @@ exports.rejectPost = async (req, res) => {
     res.status(200).json({ success: true, message: 'Rejected successfully', data: item });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error rejecting item', error: error.message });
+  }
+};
+
+// @desc    Get all admin posts (job + general) for admin panel
+// @route   GET /api/community/admin-posts
+// @access  Admin only
+exports.getAdminPosts = async (req, res) => {
+  try {
+    const { type } = req.query; // 'post' | 'job' | undefined
+    const filter = { posterType: 'admin' };
+    if (type === 'post' || type === 'job') filter.contentType = type;
+
+    const posts = await Post.find(filter).sort({ createdAt: -1 });
+    const Job = require('../models/job');
+    const jobs = type === 'post' ? [] : await Job.find({ postedBy: { $exists: true } })
+      .populate('postedBy', 'name userType')
+      .sort({ createdAt: -1 })
+      .then(all => all.filter(j => {
+        const u = j.postedBy;
+        return u && (u.userType === 'admin');
+      }));
+
+    return res.status(200).json({
+      success: true,
+      data: { posts, jobs },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Error fetching admin posts', error: error.message });
   }
 };
 

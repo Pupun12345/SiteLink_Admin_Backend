@@ -361,7 +361,7 @@ exports.getRecentActivity = async (req, res) => {
 exports.revenueStats = async (req, res) => {
     try {
         const subscriptions = await Subscription.find({ status: 'active' })
-            .populate('user', 'name userType phone email profileImage companyLogo');
+            .populate('user', 'name userType phone email profileImage companyLogo companyName');
 
         // Calculate total revenue from actual subscription amounts
         const totalRevenue = subscriptions.reduce((sum, sub) => sum + (sub.amount || 0), 0);
@@ -546,6 +546,13 @@ exports.getSubscriptionStats = async (req, res) => {
         const totalVendorSubscriptions = subscriptions.filter(sub => sub.user?.userType === 'vendor').length;
         const totalRevenue = subscriptions.reduce((sum, sub) => sum + (sub.amount || 0), 0);
 
+        const PLAN_LABELS = {
+          vendor_basic: 'Vendor Basic',
+          vendor_premium: 'Vendor Premium',
+          worker: 'Worker Premium',
+          worker_premium: 'Worker Premium',
+        };
+
         return res.status(200).json({
             success: true,
             data: {
@@ -555,7 +562,11 @@ exports.getSubscriptionStats = async (req, res) => {
                 totalWorkerSubscriptions,
                 totalVendorSubscriptions,
                 totalRevenue,
-                subscriptions
+                subscriptions: subscriptions.map(sub => ({
+                  ...sub.toObject(),
+                  planName: PLAN_LABELS[sub.plan] || sub.plan || 'Unknown Plan',
+                  planType: PLAN_LABELS[sub.plan] || sub.plan || 'Unknown Plan',
+                }))
             }
         })
 

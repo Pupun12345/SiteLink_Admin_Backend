@@ -9,12 +9,16 @@ const {
   updateComment,
   deleteComment,
   getCommentsByPost,
+  getAdminPosts,
 } = require('../controllers/communityController');
-const { protect } = require('../middleware/auth');
+const { protect, adminOnly } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 
 // GET community feed
 router.get('/feed', protect, getCommunityFeed);
+
+// GET admin posts listing
+router.get('/admin-posts', protect, adminOnly, getAdminPosts);
 
 // POST create post
 router.post('/posts', protect, upload.fields([{ name: 'images', maxCount: 5 }, { name: 'video', maxCount: 1 }]), createPost);
