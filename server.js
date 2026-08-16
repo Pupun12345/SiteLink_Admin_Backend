@@ -90,4 +90,9 @@ connectDB().then(() => {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
+
+  // Run subscription expiry check immediately on startup, then every hour
+  const expireSubscriptions = require('./utils/subscriptionCron');
+  expireSubscriptions();
+  setInterval(expireSubscriptions, 60 * 60 * 1000);
 });

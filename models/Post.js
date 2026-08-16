@@ -120,6 +120,18 @@ const postSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isAdminPost: {
+      type: Boolean,
+      default: false,
+    },
+    isPermanent: {
+      type: Boolean,
+      default: false,
+    },
+    expiresAt: {
+      type: Date,
+      default: null,
+    },
     createdAt: {
       type: Date,
       default: Date.now,

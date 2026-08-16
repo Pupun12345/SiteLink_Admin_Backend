@@ -1,6 +1,7 @@
 const Job = require('../models/job');
 const User = require('../models/User');
 const Application = require('../models/Application');
+const Subscription = require('../models/Subscription');
 const mongoose = require("mongoose");
 const Amenity = require('../models/amenities');
 
@@ -11,7 +12,21 @@ exports.getJobs = async (req, res) => {
   try {
     const { location, salaryType, search } = req.query;
 
-    let filter = { "approvalStatus": "approved" };
+    // Find vendor IDs whose subscription is expired/cancelled/inactive or past endDate
+    const now = new Date();
+    const expiredSubs = await Subscription.find({
+      $or: [
+        { status: { $in: ['expired', 'cancelled', 'inactive'] } },
+        { endDate: { $lt: now } },
+      ],
+    }).select('user');
+    const expiredVendorIds = expiredSubs.map(s => s.user);
+
+    let filter = {
+      approvalStatus: 'approved',
+      // Exclude jobs posted by vendors with expired subscriptions
+      $nor: [{ postedBy: { $in: expiredVendorIds } }],
+    };
 
     if (location) {
       filter.location = { $regex: location, $options: 'i' };

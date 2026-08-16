@@ -464,12 +464,32 @@ exports.getVendorDetails = async (req, res) => {
     }
 
     const vendor = await User.findById(id).select(
-      'companyName name phone email city gstNumber companyLogo verificationStatus verificationStatus userType adminRating adminRatingComment ratedAt whatsappNumber website role workArea workState profileImage subscription panNumber gstCertificate panCardImage isBlocked'
+      'companyName name phone email city gstNumber companyLogo verificationStatus verificationStatus userType adminRating adminRatingComment ratedAt whatsappNumber website role workArea workState profileImage subscription subscriptionId panNumber gstCertificate panCardImage isBlocked'
     );
 
     if (!vendor || vendor.userType !== 'vendor') {
       return res.status(404).json({ success: false, message: 'Vendor not found' });
     }
+
+    // Populate subscription details
+    await vendor.populate('subscriptionId', 'plan status startDate endDate amount');
+
+    const PLAN_LABELS = {
+      vendor_basic: 'Vendor Basic',
+      vendor_premium: 'Vendor Premium',
+      worker: 'Worker Premium',
+      worker_premium: 'Worker Premium',
+    };
+
+    const subDoc = vendor.subscriptionId;
+    const subscriptionDetails = subDoc ? {
+      plan: subDoc.plan,
+      planName: PLAN_LABELS[subDoc.plan] || subDoc.plan || 'Unknown Plan',
+      status: subDoc.status,
+      startDate: subDoc.startDate,
+      endDate: subDoc.endDate,
+      amount: subDoc.amount,
+    } : null;
 
     // Get platform settings to show required documents
     const platformSettings = await PlatformSettings.getOrCreateSettings();
@@ -479,6 +499,7 @@ exports.getVendorDetails = async (req, res) => {
       success: true,
       data: {
         ...vendor.toObject(),
+        subscriptionDetails,
         requiredDocuments
       }
     });
