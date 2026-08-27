@@ -2,6 +2,8 @@ const Post = require('../models/Post');
 const Job = require('../models/job');
 const Assignment = require('../models/Assignment');
 const User = require('../models/User');
+const Comment = require('../models/Comment');
+const notifyUser = require('../utils/notifyUser');
 
 // @desc    Get community feed (posts and jobs from vendors and workers)
 // @route   GET /api/community/feed
@@ -361,210 +363,199 @@ exports.getAdminPosts = async (req, res) => {
 // vendor jobs are auto-approved at creation in the app backend now, so the
 // admin job-approval workflow no longer exists.
 
-// @desc    Add comment to a post
-// @route   POST /api/posts/:id/comments
+// @desc    Add comment (or reply) to a post
+// @route   POST /api/community/posts/:id/comments
 // @access  Private
 exports.addComment = async (req, res) => {
   try {
     const { id: postId } = req.params;
-    const { comment } = req.body;
+    const { comment, parentComment = null } = req.body;
     const userId = req.user._id;
 
     if (!comment || comment.trim().length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Comment cannot be empty',
-      });
+      return res.status(400).json({ success: false, message: 'Comment cannot be empty' });
     }
 
     if (comment.length > 500) {
-      return res.status(400).json({
-        success: false,
-        message: 'Comment cannot exceed 500 characters',
-      });
+      return res.status(400).json({ success: false, message: 'Comment cannot exceed 500 characters' });
     }
 
     const post = await Post.findById(postId);
     if (!post) {
-      return res.status(404).json({
-        success: false,
-        message: 'Post not found',
-      });
+      return res.status(404).json({ success: false, message: 'Post not found' });
     }
 
-    const user = await User.findById(userId);
-    const newComment = {
-      userId,
-      userName: user.name,
-      userImage: user.profileImage,
-      comment: comment.trim(),
-      createdAt: new Date(),
-    };
+    if (parentComment) {
+      const parentDoc = await Comment.findById(parentComment);
+      if (!parentDoc || parentDoc.postId.toString() !== postId) {
+        return res.status(404).json({ success: false, message: 'Parent comment not found' });
+      }
+    }
 
-    post.comments.push(newComment);
-    post.commentsCount = post.comments.length;
-    await post.save();
+    const newComment = await Comment.create({
+      postId,
+      userId,
+      comment: comment.trim(),
+      parentComment,
+    });
+
+    await Post.updateOne({ _id: postId }, { $inc: { commentsCount: 1 } });
+
+    await newComment.populate('userId', 'name profileImage userType verificationStatus');
+
+    if (post.postedBy && post.postedBy.toString() !== userId.toString()) {
+      notifyUser(post.postedBy, {
+        type: 'new_comment',
+        title: 'New Comment',
+        body: `${newComment.userId.name || 'Someone'} commented on your post.`,
+        data: { postId: post._id, commentId: newComment._id },
+      }).catch((e) => console.error('[addComment] notifyUser failed:', e.message));
+    }
 
     res.status(201).json({
       success: true,
-      message: 'Comment added successfully',
-      data: newComment
+      message: parentComment ? 'Reply added successfully' : 'Comment added successfully',
+      data: {
+        _id: newComment._id,
+        comment: newComment.comment,
+        userId: newComment.userId._id,
+        userName: newComment.userId.name,
+        userImage: newComment.userId.profileImage || null,
+        userType: newComment.userId.userType,
+        isVerified: newComment.userId.verificationStatus === 'verified',
+        parentComment: newComment.parentComment,
+        likesCount: newComment.likesCount,
+        isEdited: newComment.isEdited,
+        createdAt: newComment.createdAt,
+        updatedAt: newComment.updatedAt,
+      },
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Failed to add comment',
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: 'Failed to add comment', error: error.message });
   }
 };
 
 // @desc    Update comment
-// @route   PUT /api/posts/:postId/comments/:commentId
+// @route   PUT /api/community/posts/:postId/comments/:commentId
 // @access  Private
 exports.updateComment = async (req, res) => {
   try {
-    const { postId, commentId } = req.params;
+    const { commentId } = req.params;
     const { comment } = req.body;
     const userId = req.user._id;
 
     if (!comment || comment.trim().length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Comment cannot be empty',
-      });
+      return res.status(400).json({ success: false, message: 'Comment cannot be empty' });
     }
 
     if (comment.length > 500) {
-      return res.status(400).json({
-        success: false,
-        message: 'Comment cannot exceed 500 characters',
-      });
+      return res.status(400).json({ success: false, message: 'Comment cannot exceed 500 characters' });
     }
 
-    const post = await Post.findById(postId);
-    if (!post) {
-      return res.status(404).json({
-        success: false,
-        message: 'Post not found',
-      });
+    const existing = await Comment.findById(commentId);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Comment not found' });
     }
 
-    const commentIndex = post.comments.findIndex(c => c._id.toString() === commentId);
-    if (commentIndex === -1) {
-      return res.status(404).json({
-        success: false,
-        message: 'Comment not found',
-      });
+    if (existing.userId.toString() !== userId.toString()) {
+      return res.status(403).json({ success: false, message: 'Not authorized to update this comment' });
     }
 
-    if (post.comments[commentIndex].userId.toString() !== userId.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to update this comment',
-      });
-    }
+    existing.comment = comment.trim();
+    existing.isEdited = true;
+    existing.editedAt = new Date();
+    await existing.save();
 
-    post.comments[commentIndex].comment = comment.trim();
-    await post.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'Comment updated successfully',
-      data: post.comments[commentIndex]
-    });
+    res.status(200).json({ success: true, message: 'Comment updated successfully', data: existing });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update comment',
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: 'Failed to update comment', error: error.message });
   }
 };
 
-// @desc    Delete comment
-// @route   DELETE /api/posts/:postId/comments/:commentId
+// @desc    Delete comment (and its replies)
+// @route   DELETE /api/community/posts/:postId/comments/:commentId
 // @access  Private
 exports.deleteComment = async (req, res) => {
   try {
     const { postId, commentId } = req.params;
     const userId = req.user._id;
+    const isAdmin = req.user.userType === 'admin' || !!req.user.permissions;
 
-    const post = await Post.findById(postId);
-    if (!post) {
-      return res.status(404).json({
-        success: false,
-        message: 'Post not found',
-      });
+    const existing = await Comment.findById(commentId);
+    if (!existing || existing.postId.toString() !== postId) {
+      return res.status(404).json({ success: false, message: 'Comment not found' });
     }
 
-    const commentIndex = post.comments.findIndex(c => c._id.toString() === commentId);
-    if (commentIndex === -1) {
-      return res.status(404).json({
-        success: false,
-        message: 'Comment not found',
-      });
+    if (existing.userId.toString() !== userId.toString() && !isAdmin) {
+      return res.status(403).json({ success: false, message: 'Not authorized to delete this comment' });
     }
 
-    if (post.comments[commentIndex].userId.toString() !== userId.toString() && req.user.userType !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to delete this comment',
-      });
-    }
+    // Delete comment + all its replies
+    const deleted = await Comment.deleteMany({ $or: [{ _id: commentId }, { parentComment: commentId }] });
+    await Post.updateOne({ _id: postId }, { $inc: { commentsCount: -deleted.deletedCount } });
 
-    post.comments.splice(commentIndex, 1);
-    post.commentsCount = post.comments.length;
-    await post.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'Comment deleted successfully'
-    });
+    res.status(200).json({ success: true, message: 'Comment deleted successfully' });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Failed to delete comment',
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: 'Failed to delete comment', error: error.message });
   }
 };
 
-// @desc    Get comments for a post
-// @route   GET /api/posts/:id/comments
+// @desc    Get comments for a post (top-level with nested replies)
+// @route   GET /api/community/posts/:id/comments
 // @access  Public
 exports.getCommentsByPost = async (req, res) => {
   try {
     const { id: postId } = req.params;
-    const { page = 1, limit = 10 } = req.query;
-
-    const post = await Post.findById(postId);
-    if (!post) {
-      return res.status(404).json({
-        success: false,
-        message: 'Post not found',
-      });
-    }
-
+    const { page = 1, limit = 20 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    const comments = post.comments.slice(skip, skip + parseInt(limit));
+
+    const [topLevel, total] = await Promise.all([
+      Comment.find({ postId, parentComment: null, status: 'active' })
+        .populate('userId', 'name profileImage userType verificationStatus')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
+      Comment.countDocuments({ postId, parentComment: null, status: 'active' }),
+    ]);
+
+    const topLevelIds = topLevel.map(c => c._id);
+    const replies = await Comment.find({ postId, parentComment: { $in: topLevelIds }, status: 'active' })
+      .populate('userId', 'name profileImage userType verificationStatus')
+      .sort({ createdAt: 1 });
+
+    const fmt = (c) => ({
+      _id: c._id,
+      comment: c.comment,
+      userId: c.userId?._id,
+      userName: c.userId?.name,
+      userImage: c.userId?.profileImage || null,
+      userType: c.userId?.userType,
+      isVerified: c.userId?.verificationStatus === 'verified',
+      parentComment: c.parentComment,
+      likesCount: c.likesCount,
+      isEdited: c.isEdited,
+      createdAt: c.createdAt,
+    });
+
+    const data = topLevel.map(c => ({
+      ...fmt(c),
+      replies: replies
+        .filter(r => r.parentComment.toString() === c._id.toString())
+        .map(fmt),
+    }));
 
     res.status(200).json({
       success: true,
-      data: comments,
+      data,
       pagination: {
         current: parseInt(page),
         limit: parseInt(limit),
-        total: post.commentsCount,
-        pages: Math.ceil(post.commentsCount / parseInt(limit))
-      }
+        total,
+        pages: Math.ceil(total / parseInt(limit)),
+      },
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch comments',
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: 'Failed to fetch comments', error: error.message });
   }
 };
 
