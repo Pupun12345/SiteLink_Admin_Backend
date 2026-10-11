@@ -66,6 +66,12 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
+  // Worker ka nominee (Family Protection claim). App backend wahi DB
+  // field likhta hai — yahan sirf admin ko dikhane ke liye padha jaata hai.
+  nomineeName: {
+    type: String,
+    default: null,
+  },
   workState: {
     type: String,
     default: null,

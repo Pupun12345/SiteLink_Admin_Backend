@@ -655,7 +655,7 @@ exports.getAllUsers = async (req, res) => {
         profileImage companyName companyLogo city workState
         role website experience adminRating isBlocked
         workArea gstNumber whatsappNumber primarySkill
-        skills willingtoRelocate salaryType salary dateOfBirth gender subscription panNumber gstCertificate panCardImage experienceCertificate 
+        skills willingtoRelocate salaryType salary dateOfBirth gender nomineeName subscription panNumber gstCertificate panCardImage experienceCertificate 
       `)
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -716,6 +716,7 @@ exports.getAllUsers = async (req, res) => {
         location: user.location,
         gender: user.gender,
         dateOfBirth: user.dateOfBirth,
+        nomineeName: user.nomineeName || null,
         experienceCertificate: user.experienceCertificate
       };
     });
@@ -918,6 +919,7 @@ exports.getUserDetails = async (req, res) => {
         certificates: regularUser.certificates,
         verificationStatus: regularUser.verificationStatus,
         experienceDescription: regularUser.experienceDescription,
+        nomineeName: regularUser.nomineeName || null,
         subscription: regularUser.subscription,
         documents: [
           {
