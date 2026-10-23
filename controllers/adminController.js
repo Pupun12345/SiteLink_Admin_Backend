@@ -5,6 +5,56 @@ const jobPost = require('../models/job');
 const Post = require('../models/Post');
 const notifyUser = require('../utils/notifyUser');
 
+// ── Worker documents: har document ka alag review ─────────────────────
+// Worker ke abhi ke documents (ID proof + har certificate), display label
+// ke saath. Review path se jude hote hain (User.documentReviews).
+function currentWorkerDocs(user) {
+  const certs = (Array.isArray(user.experienceCertificate)
+    ? user.experienceCertificate
+    : [user.experienceCertificate]).filter(Boolean);
+  return [
+    ...(user.governmentID
+      ? [{ path: user.governmentID, docType: 'governmentID', label: 'Government ID' }]
+      : []),
+    ...certs.map((path, i) => ({
+      path,
+      docType: 'experienceCertificate',
+      label: certs.length > 1 ? `Experience Certificate ${i + 1}` : 'Experience Certificate',
+    })),
+  ];
+}
+
+/// Har current document ka review — [rejectedByPath] me jo hain wo
+/// rejected (apne reason ke saath), baaki approved. Purane documents
+/// (jo ab user ke paas nahi) ke reviews hata diye jaate hain.
+function buildDocumentReviews(user, rejectedByPath = {}) {
+  const now = new Date();
+  return currentWorkerDocs(user).map((d) => ({
+    path: d.path,
+    docType: d.docType,
+    status: rejectedByPath[d.path] !== undefined ? 'rejected' : 'approved',
+    reason: rejectedByPath[d.path] || null,
+    reviewedAt: now,
+  }));
+}
+
+/// Admin ko dikhane ke liye documents + unka review status.
+function documentsWithReview(user) {
+  const byPath = new Map((user.documentReviews || []).map((r) => [r.path, r]));
+  return currentWorkerDocs(user).map((d) => {
+    const r = byPath.get(d.path);
+    return {
+      name: d.label,
+      type: d.docType === 'governmentID' ? 'IDENTITY PROOF' : 'EXPERIENCE PROOF',
+      docType: d.docType,
+      url: d.path,
+      // 'approved' | 'rejected' | 'pending' (naya upload, abhi review nahi hua)
+      reviewStatus: r ? r.status : 'pending',
+      rejectionReason: r?.status === 'rejected' ? r.reason : null,
+    };
+  });
+}
+
 // Plan key → display config. (Pehle yahan Subscription.getPlanConfig call hota
 // tha jo model par exist hi nahi karta — har subscribed user par 500 aata tha.)
 const PLAN_CONFIG = {
@@ -155,6 +205,7 @@ exports.autoApprove = async (req, res) => {
     user.isVerified = true;
     user.verificationRejectedReason = null;
     user.verificationReviewedAt = new Date();
+    if (user.userType === 'worker') user.documentReviews = buildDocumentReviews(user);
 
     // Set rating if provided
     if (rating) {
@@ -202,6 +253,8 @@ exports.verifyWorker = async (req, res) => {
     user.isVerified = true;
     user.verificationRejectedReason = null;
     user.verificationReviewedAt = new Date();
+    // Verify = saare current documents approved.
+    if (user.userType === 'worker') user.documentReviews = buildDocumentReviews(user);
 
     await user.save({ validateModifiedOnly: true });
 
@@ -232,13 +285,17 @@ exports.rejectWorker = async (req, res) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
+    // Kaun se documents galat hain: [{ path, reason }]. Diye hon to sirf
+    // wahi worker se dobara maange jaate hain; baaki documents approved.
+    const rejectedDocs = Array.isArray(req.body.documents) ? req.body.documents : [];
 
     // Validate ObjectId format
     if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ success: false, message: 'Invalid user ID format' });
     }
 
-    if (!reason || typeof reason !== 'string' || !reason.trim()) {
+    const generalReason = typeof reason === 'string' ? reason.trim() : '';
+    if (!generalReason && rejectedDocs.length === 0) {
       return res.status(400).json({ success: false, message: 'Rejection reason is required' });
     }
 
@@ -248,17 +305,41 @@ exports.rejectWorker = async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
+    let rejectedLabels = [];
+    if (rejectedDocs.length) {
+      const docs = currentWorkerDocs(user);
+      const byPath = new Map(docs.map((d) => [d.path, d]));
+      const rejectedByPath = {};
+      for (const d of rejectedDocs) {
+        const docReason = typeof d?.reason === 'string' ? d.reason.trim() : '';
+        if (!d?.path || !byPath.has(d.path)) {
+          return res.status(400).json({ success: false, message: 'Unknown document selected' });
+        }
+        if (!docReason) {
+          return res.status(400).json({ success: false, message: `Please give a reason for ${byPath.get(d.path).label}` });
+        }
+        rejectedByPath[d.path] = docReason;
+      }
+      user.documentReviews = buildDocumentReviews(user, rejectedByPath);
+      rejectedLabels = docs
+        .filter((d) => rejectedByPath[d.path] !== undefined)
+        .map((d) => `${d.label}: ${rejectedByPath[d.path]}`);
+    }
+
     user.verificationStatus = 'rejected';
     user.isVerified = false;
-    user.verificationRejectedReason = reason.trim();
+    // Overall reason — admin ka general note, warna documents ka summary.
+    user.verificationRejectedReason = generalReason || rejectedLabels.join('; ');
     user.verificationReviewedAt = new Date();
 
     await user.save({ validateModifiedOnly: true });
 
     notifyUser(user._id, {
       type: user.userType === 'vendor' ? 'vendor_rejected' : 'worker_rejected',
-      title: 'Verification Rejected',
-      body: `Your profile verification was rejected: ${user.verificationRejectedReason}`,
+      title: rejectedLabels.length ? 'Please re-upload documents' : 'Verification Rejected',
+      body: rejectedLabels.length
+        ? `${rejectedLabels.length} document(s) need re-upload — ${rejectedLabels.join('; ')}`
+        : `Your profile verification was rejected: ${user.verificationRejectedReason}`,
       data: {},
     }).catch((e) => console.error('[rejectWorker] notifyUser failed:', e.message));
 
@@ -789,7 +870,7 @@ exports.getAllWorkersAndVendors = async (req, res) => {
         profileImage companyName companyLogo city workState
         role website experience adminRating
         workArea gstNumber whatsappNumber primarySkill
-        skills willingtoRelocate salaryType salary subscription panNumber gstCertificate panCardImage experienceCertificate isBlocked
+        skills willingtoRelocate salaryType salary nomineeName subscription panNumber gstCertificate panCardImage experienceCertificate isBlocked
       `)
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -850,6 +931,7 @@ exports.getAllWorkersAndVendors = async (req, res) => {
         salaryType: user.salaryType,
         salary: user.salary,
         location: user.location,
+        nomineeName: user.nomineeName || null,
         experienceCertificate: user.experienceCertificate,
         workSamplesPhoto: user.workSamplesPhoto,
       };
@@ -921,18 +1003,11 @@ exports.getUserDetails = async (req, res) => {
         experienceDescription: regularUser.experienceDescription,
         nomineeName: regularUser.nomineeName || null,
         subscription: regularUser.subscription,
-        documents: [
-          {
-            name: 'Government ID',
-            type: 'IDENTITY PROOF',
-            url: regularUser.governmentID,
-          },
-          {
-            name: 'Experience Certificate',
-            type: 'EXPERIENCE PROOF',
-            url: regularUser.experienceCertificate,
-          },
-        ],
+        // Har document (ID + har certificate) apne review status ke saath —
+        // admin dekh sake kaun sa approved / rejected / naya (review baaki).
+        documents: documentsWithReview(regularUser),
+        experienceCertificate: regularUser.experienceCertificate || [],
+        verificationRejectedReason: regularUser.verificationRejectedReason || null,
         workPhotos: Posts,
         contactInfo: {
           email: regularUser.email,

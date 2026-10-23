@@ -635,7 +635,7 @@ exports.createWorkerProfile = async (req, res) => {
     if (req.files) {
       if (req.files.profileImage) user.profileImage = req.files.profileImage[0].path;
       if (req.files.workSamplesPhoto) user.workSamplesPhoto = req.files.workSamplesPhoto.map(f => f.path);
-      if (req.files.experienceCertificate) user.experienceCertificate = req.files.experienceCertificate[0].path;
+      if (req.files.experienceCertificate) user.experienceCertificate = req.files.experienceCertificate.map(f => f.path);
       if (req.files.governmentID) user.governmentID = req.files.governmentID[0].path;
     }
     await user.save();
@@ -827,7 +827,11 @@ exports.editWorkerProfile = async (req, res) => {
           user.profileImage = req.files.profileImage[0].path;
       }
       if (req.files.workSamplesPhoto) user.workSamplesPhoto = req.files.workSamplesPhoto.map(f => f.path);
-      if (req.files.experienceCertificate) user.experienceCertificate = req.files.experienceCertificate[0].path;
+      // Naye certificate purano ke saath jodo (max 5) — replace nahi.
+      if (req.files.experienceCertificate) {
+        const existing = Array.isArray(user.experienceCertificate) ? user.experienceCertificate : [];
+        user.experienceCertificate = [...existing, ...req.files.experienceCertificate.map(f => f.path)].slice(-5);
+      }
       if (req.files.governmentID) user.governmentID = req.files.governmentID[0].path;
     }
 

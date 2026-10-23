@@ -93,9 +93,11 @@ const userSchema = new mongoose.Schema({
     type: [String],
     default: [],
   },
+  // Ek se zyada ho sakte hain — app backend array likhta hai. Purane
+  // records me single string hai; mongoose use apne aap [string] bana deta hai.
   experienceCertificate: {
-    type: String,
-    default: null,
+    type: [String],
+    default: [],
   },
   governmentID: {
     type: String,
@@ -227,6 +229,22 @@ const userSchema = new mongoose.Schema({
   verificationReviewedAt: {
     type: Date,
     default: null,
+  },
+  // ── Har document ka alag admin review ───────────────────────────────
+  // File ke PATH se jude hain — worker naya document upload kare to naya
+  // path aata hai jiska koi review nahi (= "under review"). Worker ko sirf
+  // rejected documents dobara upload karne padte hain. App backend ke
+  // User model me bhi same field hai (dono ek hi DB padhte hain).
+  documentReviews: {
+    type: [{
+      _id: false,
+      path: { type: String, required: true },
+      docType: { type: String, enum: ['governmentID', 'experienceCertificate'] },
+      status: { type: String, enum: ['approved', 'rejected'], required: true },
+      reason: { type: String, default: null },
+      reviewedAt: { type: Date, default: Date.now },
+    }],
+    default: [],
   },
   adminRating: {
     type: Number,

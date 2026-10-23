@@ -44,7 +44,8 @@ router.put('/change-password', protect, changePassword);
 router.post('/worker/create', protect, upload.fields([
   { name: 'profileImage', maxCount: 1 },
   { name: 'workSamplesPhoto', maxCount: 10 },
-  { name: 'experienceCertificate', maxCount: 1 },
+  // Ek se zyada certificate (app backend bhi 5 par capped hai)
+  { name: 'experienceCertificate', maxCount: 5 },
   { name: 'governmentID', maxCount: 1 }
 ]), createWorkerProfile);
 
