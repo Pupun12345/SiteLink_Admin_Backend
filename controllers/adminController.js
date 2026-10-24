@@ -24,12 +24,17 @@ function currentWorkerDocs(user) {
   ];
 }
 
-/// Har current document ka review — [rejectedByPath] me jo hain wo
-/// rejected (apne reason ke saath), baaki approved. Purane documents
-/// (jo ab user ke paas nahi) ke reviews hata diye jaate hain.
+/// Admin sirf Government ID review karta hai. Experience certificates sirf
+/// vendor ko dikhane ke liye hain — unka approve / reject nahi hota.
+function reviewableWorkerDocs(user) {
+  return currentWorkerDocs(user).filter((d) => d.docType === 'governmentID');
+}
+
+/// Government ID ka review — [rejectedByPath] me hai to rejected (reason
+/// ke saath), warna approved. Purane / certificate ke reviews hat jaate hain.
 function buildDocumentReviews(user, rejectedByPath = {}) {
   const now = new Date();
-  return currentWorkerDocs(user).map((d) => ({
+  return reviewableWorkerDocs(user).map((d) => ({
     path: d.path,
     docType: d.docType,
     status: rejectedByPath[d.path] !== undefined ? 'rejected' : 'approved',
@@ -40,18 +45,26 @@ function buildDocumentReviews(user, rejectedByPath = {}) {
 
 /// Admin ko dikhane ke liye documents + unka review status.
 function documentsWithReview(user) {
-  const reviews = user.documentReviews || [];
-  // Document-wise review aane se pehle verify hue workers ke paas koi
-  // review record nahi — unke documents approved maano, "Needs review" nahi.
-  const legacyVerified = reviews.length === 0 && user.verificationStatus === 'verified';
-  const byPath = new Map(reviews.map((r) => [r.path, r]));
+  const idReviews = (user.documentReviews || []).filter((r) => r.docType === 'governmentID');
+  // Document-wise review aane se pehle verify hue workers ke paas ID ka
+  // review record nahi — unki ID approved maano, "Needs review" nahi.
+  const legacyVerified = idReviews.length === 0 && user.verificationStatus === 'verified';
+  const byPath = new Map(idReviews.map((r) => [r.path, r]));
   return currentWorkerDocs(user).map((d) => {
-    const r = legacyVerified ? { status: 'approved' } : byPath.get(d.path);
-    return {
+    const base = {
       name: d.label,
       type: d.docType === 'governmentID' ? 'IDENTITY PROOF' : 'EXPERIENCE PROOF',
       docType: d.docType,
       url: d.path,
+    };
+    // Certificate — review nahi hota, sirf dikhane ke liye.
+    if (d.docType !== 'governmentID') {
+      return { ...base, reviewable: false, reviewStatus: null, rejectionReason: null };
+    }
+    const r = legacyVerified ? { status: 'approved' } : byPath.get(d.path);
+    return {
+      ...base,
+      reviewable: true,
       // 'approved' | 'rejected' | 'pending' (naya upload, abhi review nahi hua)
       reviewStatus: r ? r.status : 'pending',
       rejectionReason: r?.status === 'rejected' ? r.reason : null,
@@ -311,7 +324,8 @@ exports.rejectWorker = async (req, res) => {
 
     let rejectedLabels = [];
     if (rejectedDocs.length) {
-      const docs = currentWorkerDocs(user);
+      // Sirf Government ID reject ho sakti hai (certificates ka review nahi).
+      const docs = reviewableWorkerDocs(user);
       const byPath = new Map(docs.map((d) => [d.path, d]));
       const rejectedByPath = {};
       for (const d of rejectedDocs) {
