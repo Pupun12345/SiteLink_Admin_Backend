@@ -374,63 +374,6 @@ exports.getSkills = async (req, res) => {
   }
 }
 
-// Get Profile
-exports.getProfile = async (req, res) => {
-  try {
-    const regularUser = await User.findById(req.user.id);
-
-    if (!regularUser) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    const Posts = await Post.find({ postedBy: regularUser._id }).sort({ createdAt: -1 });
-
-    const user = regularUser.userType === 'worker'
-      ? {
-        id: regularUser._id,
-        name: regularUser.name,
-        email: regularUser.email,
-        role: regularUser.role,
-        profileImage: regularUser.profileImage,
-        primarySkill: regularUser.primarySkill,
-        skills: regularUser.skills,
-        posts: Posts,
-        workCity: regularUser.city,
-        workState: regularUser.workState,
-        userType: regularUser.userType,
-        createdAt: regularUser.createdAt,
-        location: regularUser.location,
-      }
-      : {
-        id: regularUser._id,
-        name: regularUser.name,
-        email: regularUser.email,
-        role: regularUser.role,
-        profileImage: regularUser.profileImage,
-        userType: regularUser.userType,
-        createdAt: regularUser.createdAt,
-        workCity: regularUser.city,
-        workState: regularUser.workState,
-        phone: regularUser.phone,
-        gstNumber: regularUser.gstNumber,
-        companyName: regularUser.companyName,
-        companyLogo: regularUser.companyLogo,
-        designation: regularUser.role,
-        workArea: regularUser.workArea,
-        whatsappNumber: regularUser.whatsappNumber,
-        website: regularUser.website,
-      };
-
-    return res.json({
-      success: true,
-      data: { user }
-    });
-
-  } catch (error) {
-    return res.status(500).json({ success: false, message: "Internal server error" });
-  }
-}
-
 // Create Profile - Worker
 exports.createWorkerProfile = async (req, res) => {
   try {

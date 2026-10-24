@@ -1,6 +1,7 @@
 const Job = require('../models/job');
 const User = require('../models/User');
 const Application = require('../models/Application');
+const Subscription = require('../models/Subscription');
 const mongoose = require("mongoose");
 const Amenity = require('../models/amenities');
 
@@ -11,7 +12,21 @@ exports.getJobs = async (req, res) => {
   try {
     const { location, salaryType, search } = req.query;
 
-    let filter = { "approvalStatus": "approved" };
+    // Find vendor IDs whose subscription is expired/cancelled/inactive or past endDate
+    const now = new Date();
+    const expiredSubs = await Subscription.find({
+      $or: [
+        { status: { $in: ['expired', 'cancelled', 'inactive'] } },
+        { endDate: { $lt: now } },
+      ],
+    }).select('user');
+    const expiredVendorIds = expiredSubs.map(s => s.user);
+
+    let filter = {
+      approvalStatus: 'approved',
+      // Exclude jobs posted by vendors with expired subscriptions
+      $nor: [{ postedBy: { $in: expiredVendorIds } }],
+    };
 
     if (location) {
       filter.location = { $regex: location, $options: 'i' };
@@ -193,25 +208,29 @@ exports.createJob = async (req, res) => {
     const { title, company, location, latitude, longitude, quantity, salary, salaryType, isUrgent, duration, description, experience, amenities } = req.body;
 
     const user = await User.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
+    // Allow admin users (from AdminUser collection) to create jobs directly
+    const isAdmin = req.user.userType === 'admin' || !!req.user.permissions;
+    if (!isAdmin) {
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
 
-    if (!user.isVerified) {
-      return res.status(403).json({
-        success: false,
-        message: 'Account verification required for posting jobs. Please wait for your account to be verified before creating a job.'
-      });
-    }
+      if (!user.isVerified) {
+        return res.status(403).json({
+          success: false,
+          message: 'Account verification required for posting jobs. Please wait for your account to be verified before creating a job.'
+        });
+      }
 
-    if (user.userType === 'worker' || user.userType === 'customer') {
-      return res.status(403).json({
-        success: false,
-        message: 'Only Vendor or Admin can create jobs'
-      });
+      if (user.userType === 'worker' || user.userType === 'customer') {
+        return res.status(403).json({
+          success: false,
+          message: 'Only Vendor or Admin can create jobs'
+        });
+      }
     }
 
     if (!title || !company || !location || !description || !experience) {

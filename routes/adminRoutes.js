@@ -20,6 +20,7 @@ const {
   removeSkillFromWorker,
   getAllSubscriptions,
   toggleBlockUser,
+  getJobsReport,
 } = require('../controllers/adminController');
 const { protect, adminOnly } = require('../middleware/auth');
 
@@ -34,6 +35,7 @@ router.use(adminOnly);
 router.get('/users', getAllUsers);
 router.get("/vendor-worker",getAllWorkersAndVendors);
 router.get('/subscriptions',getAllSubscriptions);
+router.get('/reports/jobs', getJobsReport);
 router.put('/users/:id/verify', verifyWorker);
 router.put('/users/:id/reject', rejectWorker);
 router.put('/users/:id/rate', rateWorker);

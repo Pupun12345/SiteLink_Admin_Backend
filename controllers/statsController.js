@@ -255,7 +255,7 @@ exports.getChartData = async (req, res) => {
         const workerGrowth = buildSeries(workerGrowthData);
         const vendorRegistrations = buildSeries(vendorRegistrationsData);
 
-        const subscriptions = await Subscription.find({ status: 'active', startDate: dateFilter });
+        const subscriptions = await Subscription.find({ startDate: dateFilter });
         const revenueTotals = {};
         subscriptions.forEach(sub => {
             if (sub.startDate) {
@@ -361,7 +361,7 @@ exports.getRecentActivity = async (req, res) => {
 exports.revenueStats = async (req, res) => {
     try {
         const subscriptions = await Subscription.find({ status: 'active' })
-            .populate('user', 'name userType phone email profileImage companyLogo');
+            .populate('user', 'name userType phone email profileImage companyLogo companyName');
 
         // Calculate total revenue from actual subscription amounts
         const totalRevenue = subscriptions.reduce((sum, sub) => sum + (sub.amount || 0), 0);
@@ -466,7 +466,7 @@ exports.getYearData = async (req, res) => {
                 { $group: { _id: { $dateToString: { format: groupFormat, date: '$createdAt' } }, count: { $sum: 1 } } },
                 { $sort: { _id: 1 } }
             ]),
-            Subscription.find({ status: 'active', startDate: dateFilter })
+            Subscription.find({ startDate: dateFilter })
         ]);
 
         const revenueTotals = {};
@@ -494,6 +494,47 @@ exports.getYearData = async (req, res) => {
     }
 };
 
+exports.getRevenueReport = async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+        if (!startDate || !endDate) {
+            return res.status(400).json({ success: false, message: 'startDate and endDate are required' });
+        }
+
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+
+        const subscriptions = await Subscription.find({
+            startDate: { $gte: start, $lte: end }
+        }).populate('user', 'name userType companyName');
+
+        const totalRevenue = subscriptions.reduce((sum, sub) => sum + (sub.amount || 0), 0);
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                totalRevenue,
+                totalSubscriptions: subscriptions.length,
+                subscriptions: subscriptions.map(sub => ({
+                    userName: sub.user?.name || 'N/A',
+                    companyName: sub.user?.companyName || 'N/A',
+                    userType: sub.user?.userType || 'N/A',
+                    plan: sub.plan || 'N/A',
+                    status: sub.status || 'N/A',
+                    amount: sub.amount || 0,
+                    startDate: sub.startDate,
+                    endDate: sub.endDate,
+                }))
+            }
+        });
+    } catch (error) {
+        console.error('getRevenueReport error:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch revenue report' });
+    }
+};
+
 exports.getSubscriptionStats = async (req, res) => {
     try {
         const subscriptions = await Subscription.find().populate('user', 'name userType companyName companyLogo profileImage').select('user plan status amount startDate endDate ');
@@ -505,6 +546,13 @@ exports.getSubscriptionStats = async (req, res) => {
         const totalVendorSubscriptions = subscriptions.filter(sub => sub.user?.userType === 'vendor').length;
         const totalRevenue = subscriptions.reduce((sum, sub) => sum + (sub.amount || 0), 0);
 
+        const PLAN_LABELS = {
+          vendor_basic: 'Vendor Basic',
+          vendor_premium: 'Vendor Premium',
+          worker: 'Worker Premium',
+          worker_premium: 'Worker Premium',
+        };
+
         return res.status(200).json({
             success: true,
             data: {
@@ -514,7 +562,11 @@ exports.getSubscriptionStats = async (req, res) => {
                 totalWorkerSubscriptions,
                 totalVendorSubscriptions,
                 totalRevenue,
-                subscriptions
+                subscriptions: subscriptions.map(sub => ({
+                  ...sub.toObject(),
+                  planName: PLAN_LABELS[sub.plan] || sub.plan || 'Unknown Plan',
+                  planType: PLAN_LABELS[sub.plan] || sub.plan || 'Unknown Plan',
+                }))
             }
         })
 
