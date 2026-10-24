@@ -40,9 +40,13 @@ function buildDocumentReviews(user, rejectedByPath = {}) {
 
 /// Admin ko dikhane ke liye documents + unka review status.
 function documentsWithReview(user) {
-  const byPath = new Map((user.documentReviews || []).map((r) => [r.path, r]));
+  const reviews = user.documentReviews || [];
+  // Document-wise review aane se pehle verify hue workers ke paas koi
+  // review record nahi — unke documents approved maano, "Needs review" nahi.
+  const legacyVerified = reviews.length === 0 && user.verificationStatus === 'verified';
+  const byPath = new Map(reviews.map((r) => [r.path, r]));
   return currentWorkerDocs(user).map((d) => {
-    const r = byPath.get(d.path);
+    const r = legacyVerified ? { status: 'approved' } : byPath.get(d.path);
     return {
       name: d.label,
       type: d.docType === 'governmentID' ? 'IDENTITY PROOF' : 'EXPERIENCE PROOF',
