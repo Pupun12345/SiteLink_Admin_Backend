@@ -10,7 +10,8 @@ const {
   markAllAsRead,
   archiveNotification,
   generateSystemNotifications,
-  getNotificationStats
+  getNotificationStats,
+  getUnreadAlerts
 } = require('../controllers/notificationController');
 const { protect } = require('../middleware/auth');
 
@@ -28,6 +29,9 @@ const adminOnly = (req, res, next) => {
 
 // GET all notifications with filtering and pagination
 router.get('/', protect, adminOnly, getNotifications);
+
+// GET naye (unread) admin alerts — badge + popup ke liye (/:id se pehle)
+router.get('/unread-alerts', protect, adminOnly, getUnreadAlerts);
 
 // GET notification statistics
 router.get('/stats', protect, adminOnly, getNotificationStats);

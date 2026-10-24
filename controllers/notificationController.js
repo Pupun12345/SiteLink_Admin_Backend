@@ -3,6 +3,35 @@ const User = require('../models/User');
 const Job = require('../models/job');
 const notifyUser = require('../utils/notifyUser');
 
+// `notifications` collection me do tarah ke documents hain:
+//   • admin panel ke alerts (title / message / status / recipientType)
+//   • app ke users ke push notifications (recipient / body) — app backend
+//     likhta hai, hazaaron me.
+// Admin panel ko sirf pehle wale chahiye, warna asli alerts (jaise
+// "Government ID re-uploaded") users ke messages ke beech kho jaate the.
+const ADMIN_FEED = { recipient: { $exists: false } };
+
+// @desc    Admin ke naye (unread) alerts — panel har ~30s isse poochta hai
+//          taaki badge dikhe aur naya alert aate hi popup aaye.
+// @route   GET /api/notifications/unread-alerts
+// @access  Private (Admin)
+exports.getUnreadAlerts = async (req, res) => {
+  try {
+    const filter = { ...ADMIN_FEED, recipientType: 'admin', status: 'Unread' };
+    const [count, latest] = await Promise.all([
+      Notification.countDocuments(filter),
+      Notification.find(filter)
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .select('title message priority category actionUrl createdAt')
+        .lean(),
+    ]);
+    res.status(200).json({ success: true, data: { count, latest } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch alerts', error: error.message });
+  }
+};
+
 // @desc    Get all notifications with filtering and pagination
 // @route   GET /api/notifications
 // @access  Private (Admin)
@@ -20,9 +49,9 @@ exports.getNotifications = async (req, res) => {
       sortOrder = 'desc'
     } = req.query;
 
-    // Build filter object
-    let filter = {};
-    
+    // Build filter object — sirf admin panel ke alerts (users ke push nahi)
+    let filter = { ...ADMIN_FEED };
+
     if (type !== 'all') {
       filter.type = type;
     }
@@ -61,6 +90,7 @@ exports.getNotifications = async (req, res) => {
     const totalNotifications = await Notification.countDocuments(filter);
 
     const stats = await Notification.aggregate([
+      { $match: ADMIN_FEED },
       {
         $group: {
           _id: null,
@@ -352,7 +382,7 @@ exports.markAsRead = async (req, res) => {
 exports.markAllAsRead = async (req, res) => {
   try {
     const result = await Notification.updateMany(
-      { status: 'Unread' },
+      { ...ADMIN_FEED, status: 'Unread' },
       { status: 'Read' }
     );
 
@@ -506,6 +536,7 @@ exports.getNotificationStats = async (req, res) => {
 
     // Get comprehensive statistics
     const stats = await Notification.aggregate([
+      { $match: ADMIN_FEED },
       {
         $facet: {
           overall: [
