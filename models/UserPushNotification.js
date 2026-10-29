@@ -32,6 +32,8 @@ const schema = new mongoose.Schema({
       'worker_rejected',
       'subscription_activated',
       'phone_changed',
+      // Nayi job matching workers ko (utils/notifyMatchingWorkers.js)
+      'new_job',
       'general',
     ],
     default: 'general',

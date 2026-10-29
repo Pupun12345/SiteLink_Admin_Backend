@@ -4,6 +4,7 @@ const Application = require('../models/Application');
 const Subscription = require('../models/Subscription');
 const mongoose = require("mongoose");
 const Amenity = require('../models/amenities');
+const notifyMatchingWorkers = require('../utils/notifyMatchingWorkers');
 
 // @desc    Get all jobs
 // @route   GET /api/jobs
@@ -341,6 +342,10 @@ exports.createJob = async (req, res) => {
       success: true,
       data: job,
     });
+
+    // Admin ki job turant live hoti hai — matching workers (skill + jagah)
+    // ko nayi job ki khabar. Response iska intezaar nahi karta.
+    notifyMatchingWorkers(job);
   } catch (error) {
     res.status(500).json({
       success: false,
