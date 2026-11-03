@@ -108,13 +108,14 @@ exports.createPost = async (req, res) => {
       postedById = user._id;
     }
 
-    const images = req.files?.images
-      ? req.files.images.map(file => file.path)
-      : [];
+    // Accept Cloudinary URLs sent by the client after direct browser upload
+    const images = Array.isArray(req.body.images)
+      ? req.body.images
+      : req.body.images
+        ? [req.body.images]
+        : [];
 
-    const video = req.files?.video?.[0]
-      ? req.files.video[0].path
-      : null;
+    const video = req.body.video || null;
 
     let isAdminPost = false;
     let isPermanent = false;

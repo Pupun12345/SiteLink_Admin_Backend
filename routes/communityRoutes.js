@@ -12,7 +12,6 @@ const {
   getAdminPosts,
 } = require('../controllers/communityController');
 const { protect, adminOnly } = require('../middleware/auth');
-const upload = require('../middleware/upload');
 
 // GET community feed
 router.get('/feed', protect, getCommunityFeed);
@@ -20,8 +19,8 @@ router.get('/feed', protect, getCommunityFeed);
 // GET admin posts listing
 router.get('/admin-posts', protect, adminOnly, getAdminPosts);
 
-// POST create post
-router.post('/posts', protect, upload.fields([{ name: 'images', maxCount: 5 }, { name: 'video', maxCount: 1 }]), createPost);
+// POST create post (images/video are Cloudinary URLs from direct browser upload)
+router.post('/posts', protect, createPost);
 // PUT like/unlike post
 router.put('/posts/:postId/like', protect, likeUnlikePost);
 

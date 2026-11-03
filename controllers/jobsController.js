@@ -206,7 +206,7 @@ exports.getJobById = async (req, res) => {
 // @access  Private
 exports.createJob = async (req, res) => {
   try {
-    const { title, company, location, latitude, longitude, quantity, salary, salaryType, isUrgent, duration, description, experience, amenities } = req.body;
+    const { title, company, location, latitude, longitude, quantity, salary, salaryType, isUrgent, duration, description, experience, amenities, companyLogoUrl } = req.body;
 
     const user = await User.findById(req.user.id);
     // Allow admin users (from AdminUser collection) to create jobs directly
@@ -328,7 +328,8 @@ exports.createJob = async (req, res) => {
       duration: duration ? duration.trim() : '',
       description: description.trim(),
       experience: exp.toString(),
-      amenities:amenityObjectIds,
+      amenities: amenityObjectIds,
+      companyLogo: companyLogoUrl || undefined,
       postedBy: req.user.id,
       isActive: true,
       // Jobs are auto-approved now (no admin review workflow) — admin-created
