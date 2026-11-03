@@ -39,6 +39,12 @@ const planDetailsSchema = new mongoose.Schema({
         default: 0,
         min: 0,
     },
+    // Auto-pay ke liye Razorpay Plan id — app backend banata hai. Price
+    // badalne par editPlanAmount ise null karta hai (naya plan banega).
+    razorpayPlanId: {
+        type: String,
+        default: null,
+    },
     isActive: {
         type: Boolean,
         default: true,

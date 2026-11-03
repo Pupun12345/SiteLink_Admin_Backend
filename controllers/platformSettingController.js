@@ -74,6 +74,14 @@ exports.editPlanAmount = async (req, res) => {
         if (features !== undefined) plan.features = Array.isArray(features) ? features.filter(f => f.trim()) : [];
         if (maxWorkers !== undefined) plan.maxWorkers = Math.max(parseInt(maxWorkers, 10) || 0, 0);
 
+        // Razorpay par plan ki keemat/frequency edit nahi hoti. Price ya
+        // frequency badli to purana Razorpay plan hata do — agli auto-pay
+        // par app backend nayi keemat ka plan khud bana leta hai. Warna
+        // auto-pay purani keemat (jaise ₹299) par hi charge karta rehta.
+        if (plan.isModified('amount') || plan.isModified('frequency')) {
+            plan.razorpayPlanId = null;
+        }
+
         await plan.save();
         return res.status(200).json({ success: true, message: 'Plan updated successfully', data: plan });
     } catch (error) {
