@@ -57,6 +57,7 @@ app.use('/api/system', systemRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/platform-settings', platformSettingRoutes);
 app.use("/api/amenities", amenityRoutes);
+app.use('/api/uploads', require('./routes/uploadRoutes'));
 
 
 
