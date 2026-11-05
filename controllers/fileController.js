@@ -49,7 +49,7 @@ function buildFilename(cloudinaryUrl, label) {
   }
 }
 
-// Determine MIME type from URL extension or fallback to octet-stream
+// Determine MIME type from URL extension or fallback to octet-streams
 function getMimeType(url, contentTypeHeader) {
   if (contentTypeHeader && !contentTypeHeader.includes('application/octet-stream')) {
     return contentTypeHeader.split(';')[0].trim();
