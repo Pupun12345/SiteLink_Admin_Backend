@@ -33,32 +33,38 @@ exports.createOrUpdatePolicy = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid policy type. Must be PRIVACY_POLICY or TERMS_AND_CONDITIONS or HELP_AND_SUPPORT' });
     }
 
-    // Determine version number — use admin-provided or auto-increment
+    const type = policyType.toUpperCase();
+
+    // DB me `policyType` par UNIQUE index hai — har policy ka ek hi record
+    // ho sakta hai. Pehle yahan purane band karke naya record banate the:
+    // naya insert duplicate-key se fail hota aur purana pehle hi band ho
+    // chuka hota — policy app se gayab, admin ka update kabhi save nahi.
+    // Ab usi ek record ko update karte hain (version +1), ek hi step me.
+    const existing = await LegalPolicy.findOne({ policyType: type });
     let newVersion;
     if (version && !isNaN(parseFloat(version))) {
       newVersion = parseFloat(version);
     } else {
-      const latest = await LegalPolicy.findOne({ policyType: policyType.toUpperCase() }).sort({ version: -1 });
-      newVersion = latest ? latest.version + 1 : 1;
+      newVersion = existing ? Math.floor(existing.version || 0) + 1 : 1;
     }
 
-    // Deactivate all previous versions of this policy type
-    await LegalPolicy.updateMany({ policyType: policyType.toUpperCase() }, { isActive: false });
-
-    const newPolicy = new LegalPolicy({
-      policyType: policyType.toUpperCase(),
-      title,
-      content,
-      version: newVersion,
-      isActive: true,
-      effectiveDate: effectiveDate || new Date(),
-      createdBy: userId,
-      lastUpdatedBy: userId,
-      changelog,
-      summary,
-    });
-
-    await newPolicy.save();
+    const newPolicy = await LegalPolicy.findOneAndUpdate(
+      { policyType: type },
+      {
+        $set: {
+          title,
+          content,
+          version: newVersion,
+          isActive: true,
+          effectiveDate: effectiveDate || new Date(),
+          lastUpdatedBy: userId,
+          changelog,
+          summary,
+        },
+        $setOnInsert: { createdBy: userId },
+      },
+      { upsert: true, returnDocument: 'after' }
+    );
 
     const populatedPolicy = await LegalPolicy.findById(newPolicy._id).populate('createdBy', 'name email');
 
