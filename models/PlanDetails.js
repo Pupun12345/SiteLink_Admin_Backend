@@ -39,6 +39,13 @@ const planDetailsSchema = new mongoose.Schema({
         default: 0,
         min: 0,
     },
+    // Pehle mahine/saal ki offer price (jaise ₹5). 0 = koi offer nahi.
+    // App backend ke PlanDetails schema se match rehna chahiye.
+    introAmount: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
     // Auto-pay ke liye Razorpay Plan id — app backend banata hai. Price
     // badalne par editPlanAmount ise null karta hai (naya plan banega).
     razorpayPlanId: {

@@ -37,7 +37,7 @@ exports.getPlans = async (req, res) => {
 
 exports.createPlan = async (req, res) => {
     try {
-        const { planName, userType, planType, frequency, amount, features, maxWorkers } = req.body;
+        const { planName, userType, planType, frequency, amount, features, maxWorkers, introAmount } = req.body;
         if (!planName || !userType || !planType || !frequency || amount === undefined) {
             return res.status(400).json({ success: false, message: 'planName, userType, planType, frequency and amount are required' });
         }
@@ -50,6 +50,8 @@ exports.createPlan = async (req, res) => {
             amount: parseFloat(amount),
             features: Array.isArray(features) ? features.filter(f => f.trim()) : [],
             maxWorkers: parsedMaxWorkers,
+            // Pehle cycle ki offer price (jaise ₹5). 0 = koi offer nahi.
+            introAmount: Math.max(parseFloat(introAmount) || 0, 0),
             isActive: true,
         });
         return res.status(201).json({ success: true, message: 'Plan created successfully', data: plan });
@@ -61,7 +63,7 @@ exports.createPlan = async (req, res) => {
 exports.editPlanAmount = async (req, res) => {
     try {
         const { id } = req.params;
-        const { planName, userType, planType, frequency, amount, features, maxWorkers } = req.body;
+        const { planName, userType, planType, frequency, amount, features, maxWorkers, introAmount } = req.body;
 
         const plan = await planDetails.findById(id);
         if (!plan) return res.status(404).json({ success: false, message: 'Plan not found' });
@@ -73,6 +75,7 @@ exports.editPlanAmount = async (req, res) => {
         if (amount !== undefined) plan.amount = parseFloat(amount);
         if (features !== undefined) plan.features = Array.isArray(features) ? features.filter(f => f.trim()) : [];
         if (maxWorkers !== undefined) plan.maxWorkers = Math.max(parseInt(maxWorkers, 10) || 0, 0);
+        if (introAmount !== undefined) plan.introAmount = Math.max(parseFloat(introAmount) || 0, 0);
 
         // Razorpay par plan ki keemat/frequency edit nahi hoti. Price ya
         // frequency badli to purana Razorpay plan hata do — agli auto-pay
