@@ -3,28 +3,22 @@ const User = require('../models/User');
 const Skill = require('../models/Skill');
 // Admin backend me users ke push records ka model ye hai (same 'notifications' collection)
 const Notification = require('../models/UserPushNotification');
-
-// ═══════════════════════════════════════════════════════════════════
-//  NAYI JOB → SAHI WORKERS KO NOTIFICATION
-// ═══════════════════════════════════════════════════════════════════
-// Vendor / admin job post kare (aur wo live ho) to un workers ko batao
-// jinke kaam ki hai — sabko nahi, warna spam lagta hai aur log
-// notifications band kar dete hain.
-//
-// Kisko jaata hai:
-//   1. Skill mile — job ke roles (ya title me likhi skill) worker ki
-//      primarySkill / additional skills me ho.
-//   2. Jagah mile — worker ka city ya state job ki location me ho, YA
-//      worker "relocate ke liye taiyaar" ho.
-//   3. Worker blocked na ho.
-// Skill pata hi na chale (title me koi jaani-pehchani skill nahi) to
-// sirf jagah se match karte hain. Na skill na jagah → kisi ko nahi.
-//
-// Har worker ko uski app-bhasha (hindi / english) me. Fire-and-forget:
-// job banane ka response iska intezaar nahi karta.
 //
 // App backend (SiteLink_Backend/utils/notifyMatchingWorkers.js) me bhi
 // same logic hai — vendor ki jobs wahan se, admin ki jobs yahan se.
+
+// ═══════════════════════════════════════════════════════════════════
+//  NAYI JOB → WORKERS KO NOTIFICATION
+// ═══════════════════════════════════════════════════════════════════
+// Vendor / admin job post kare (aur wo live ho) to SAARE workers ko
+// batate hain (blocked ko chhod ke). Pehle sirf skill + jagah milne par
+// jaata tha — chhote platform par lagbhag kisi ki skill exactly match
+// nahi hoti thi, to kisi ko notification hi nahi jaata tha.
+//
+// Jinki skill job se milti hai unhe khaas message ("aapki skill ki job")
+// aur wo list me sabse pehle (MAX_WORKERS ki limit lage to bhi unhe
+// zaroor mile). Har worker ko uski app-bhasha (hindi / english) me.
+// Fire-and-forget: job banane ka response iska intezaar nahi karta.
 
 const MAX_WORKERS = 5000;   // ek job par itne se zyada ko nahi
 const FCM_BATCH = 500;      // FCM multicast ki limit
@@ -42,22 +36,13 @@ async function jobSkills(job) {
 }
 
 function workerHasSkill(worker, skills) {
-  if (!skills.length) return true;
+  if (!skills.length) return false;
   const mine = [norm(worker.primarySkill), ...(worker.skills || []).map((s) => norm(s.skillName))]
     .filter(Boolean);
   return mine.some((m) => skills.some((s) => m === s || m.includes(s) || s.includes(m)));
 }
 
-function workerNearJob(worker, location) {
-  if (!location) return true;
-  const city = norm(worker.city);
-  const state = norm(worker.workState);
-  return (city && location.includes(city))
-    || (state && location.includes(state))
-    || worker.willingtoRelocate === true;
-}
-
-function messageFor(job, skills, lang) {
+function messageFor(job, lang, skillMatch) {
   const role = (job.roles || []).length
     ? job.roles.map((r) => r.skill).join(', ')
     : (job.title || '').trim();
@@ -70,12 +55,12 @@ function messageFor(job, skills, lang) {
   const bits = [pay, place].filter(Boolean).join(' · ');
   if (lang === 'hindi') {
     return {
-      title: `नई जॉब: ${role}`.slice(0, 100),
+      title: (skillMatch ? `🎯 आपकी स्किल की नई जॉब: ${role}` : `नई जॉब: ${role}`).slice(0, 100),
       body: `${bits ? `${bits} — ` : ''}अप्लाई करने के लिए टैप करें`,
     };
   }
   return {
-    title: `New job: ${role}`.slice(0, 100),
+    title: (skillMatch ? `🎯 New job for your skill: ${role}` : `New job: ${role}`).slice(0, 100),
     body: `${bits ? `${bits} — ` : ''}Tap to view and apply`,
   };
 }
@@ -85,51 +70,58 @@ async function notifyMatchingWorkers(job) {
     if (!job || job.approvalStatus !== 'approved' || job.isActive === false) return 0;
 
     const skills = await jobSkills(job);
-    const location = norm(job.location);
-    if (!skills.length && !location) return 0;
 
-    const candidates = await User.find({
+    const workers = await User.find({
       userType: 'worker',
       isBlocked: { $ne: true },
       _id: { $ne: job.postedBy },
     })
-      .select('primarySkill skills city workState willingtoRelocate language fcmToken')
+      .select('primarySkill skills language fcmToken')
       .lean();
 
-    const matched = candidates
-      .filter((w) => workerHasSkill(w, skills) && workerNearJob(w, location))
-      .slice(0, MAX_WORKERS);
-    if (!matched.length) return 0;
+    // Skill wale pehle — limit lage to bhi unhe zaroor mile.
+    const tagged = workers.map((w) => ({ ...w, skillMatch: workerHasSkill(w, skills) }));
+    tagged.sort((a, b) => Number(b.skillMatch) - Number(a.skillMatch));
+    const targets = tagged.slice(0, MAX_WORKERS);
+    if (!targets.length) return 0;
 
     const data = { type: 'new_job', jobId: String(job._id) };
 
     // 1) In-app Alerts tab ke records (har worker ki bhasha me)
     await Notification.insertMany(
-      matched.map((w) => {
-        const m = messageFor(job, skills, w.language);
+      targets.map((w) => {
+        const m = messageFor(job, w.language, w.skillMatch);
         return { recipient: w._id, title: m.title, body: m.body, type: 'new_job', data };
       }),
       { ordered: false },
     );
 
-    // 2) Phone par push — bhasha ke hisaab se group, 500-500 ke batch
+    // 2) Phone par push — bhasha + skill-match ke hisaab se group, 500 ke batch
     const staleTokens = [];
+    let pushed = 0;
     for (const lang of ['english', 'hindi']) {
-      const group = matched.filter((w) => w.fcmToken && (w.language === 'hindi') === (lang === 'hindi'));
-      const m = messageFor(job, skills, lang);
-      for (let i = 0; i < group.length; i += FCM_BATCH) {
-        const batch = group.slice(i, i + FCM_BATCH);
-        const res = await admin.messaging().sendEachForMulticast({
-          tokens: batch.map((w) => w.fcmToken),
-          notification: { title: m.title, body: m.body },
-          data,
-        });
-        res.responses.forEach((r, idx) => {
-          const code = r.error?.code || '';
-          if (code.includes('registration-token-not-registered') || code.includes('invalid-registration-token')) {
-            staleTokens.push(batch[idx]._id);
-          }
-        });
+      for (const skillMatch of [true, false]) {
+        const group = targets.filter((w) => w.fcmToken
+          && (w.language === 'hindi') === (lang === 'hindi')
+          && w.skillMatch === skillMatch);
+        if (!group.length) continue;
+        const m = messageFor(job, lang, skillMatch);
+        for (let i = 0; i < group.length; i += FCM_BATCH) {
+          const batch = group.slice(i, i + FCM_BATCH);
+          const res = await admin.messaging().sendEachForMulticast({
+            tokens: batch.map((w) => w.fcmToken),
+            notification: { title: m.title, body: m.body },
+            data,
+            android: { priority: 'high', notification: { channelId: 'sitelink_default_channel' } },
+          });
+          pushed += res.successCount;
+          res.responses.forEach((r, idx) => {
+            const code = r.error?.code || '';
+            if (code.includes('registration-token-not-registered') || code.includes('invalid-registration-token')) {
+              staleTokens.push(batch[idx]._id);
+            }
+          });
+        }
       }
     }
     // App uninstall ho chuka — purana token hatao (aage ke push fail na hon)
@@ -137,9 +129,10 @@ async function notifyMatchingWorkers(job) {
       await User.updateMany({ _id: { $in: staleTokens } }, { $set: { fcmToken: null } });
     }
 
-    console.log(`[notifyMatchingWorkers] job ${job._id}: ${matched.length} worker(s) notified`
+    console.log(`[notifyMatchingWorkers] job ${job._id}: ${targets.length} worker(s) notified, `
+      + `${pushed} push delivered, ${targets.filter((w) => w.skillMatch).length} skill match`
       + ` (skills: ${skills.join(', ') || '-'})`);
-    return matched.length;
+    return targets.length;
   } catch (err) {
     console.error('[notifyMatchingWorkers] failed:', err.message);
     return 0;
