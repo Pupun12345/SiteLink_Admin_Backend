@@ -537,7 +537,7 @@ exports.getRevenueReport = async (req, res) => {
 
 exports.getSubscriptionStats = async (req, res) => {
     try {
-        const subscriptions = await Subscription.find().populate('user', 'name userType companyName companyLogo profileImage').select('user plan status amount startDate endDate ');
+        const subscriptions = await Subscription.find().populate('user', 'name userType companyName companyLogo profileImage phone email');
 
         const totalSubscriptions = subscriptions.length;
         const totalPremiumVendorSubscriptions = subscriptions.filter(sub => sub.plan === 'vendor_premium').length;
@@ -563,9 +563,22 @@ exports.getSubscriptionStats = async (req, res) => {
                 totalVendorSubscriptions,
                 totalRevenue,
                 subscriptions: subscriptions.map(sub => ({
-                  ...sub.toObject(),
+                  _id: sub._id,
+                  userId: sub.user?._id || sub._id,
+                  name: sub.user?.name || 'Deleted User',
+                  userType: sub.user?.userType || 'N/A',
+                  profileImage: sub.user?.profileImage || null,
+                  companyName: sub.user?.companyName || null,
+                  companyLogo: sub.user?.companyLogo || null,
+                  phone: sub.user?.phone || null,
+                  email: sub.user?.email || null,
+                  plan: sub.plan,
                   planName: PLAN_LABELS[sub.plan] || sub.plan || 'Unknown Plan',
                   planType: PLAN_LABELS[sub.plan] || sub.plan || 'Unknown Plan',
+                  status: sub.status,
+                  amount: sub.amount,
+                  startDate: sub.startDate,
+                  endDate: sub.endDate,
                 }))
             }
         })
