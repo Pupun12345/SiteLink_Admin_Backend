@@ -134,7 +134,8 @@ exports.getPendingWorkers = async (req, res) => {
     const workers = await User.find({
       userType: 'worker',
       verificationStatus: 'pending',
-    }).select('name phone role experience city profileImage verificationStatus');
+    }).select('name phone role primarySkill experience city workState profileImage verificationStatus governmentID createdAt isBlocked')
+      .sort({ createdAt: -1 });
 
     return res.json({
       success: true,
@@ -551,7 +552,8 @@ exports.getPendingVendors = async (req, res) => {
     const vendors = await User.find({
       userType: 'vendor',
       verificationStatus: 'pending',
-    }).select('companyName name phone city companyLogo verificationStatus createdAt email gstNumber whatsappNumber website subsciption panNumber gstCertificate panCardImage isBlocked');
+    }).select('companyName name phone city workState companyLogo verificationStatus createdAt email gstNumber whatsappNumber website panNumber gstCertificate panCardImage isBlocked')
+      .sort({ createdAt: -1 });
 
     return res.json({
       success: true,
