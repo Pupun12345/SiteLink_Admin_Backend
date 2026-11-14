@@ -14,10 +14,14 @@ exports.getCommunityFeed = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
+    const blockedUsers = await User.find({ isBlocked: true }, '_id').lean();
+    const blockedIds = blockedUsers.map((u) => u._id);
+
     const filter = {
       isActive: true,
       approvalStatus: "approved",
-      // Exclude admin timed posts that have expired
+      posterType: { $in: ["vendor", "worker", "admin"] },
+      postedBy: { $nin: blockedIds },
       $or: [
         { isAdminPost: { $ne: true } },
         { isAdminPost: true, isPermanent: true },
