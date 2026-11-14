@@ -7,7 +7,7 @@ const createAdminProfile = async () => {
     await mongoose.connect(process.env.MONGODB_URI);
     console.log('📡 Connected to database');
 
-    const existingAdmin = await User.findOne({ email: 'admin@sitelink.co' });
+    const existingAdmin = await User.findOne({ email: 'www.smartnex@gmail.com' });
 
     if (existingAdmin) {
       console.log('❌ Admin already exists');
@@ -16,8 +16,8 @@ const createAdminProfile = async () => {
 
     const admin = new User({
       name: 'Admin',
-      email: 'admin@sitelink.co',
-      phone: '9999999980',
+      email: 'www.smartnex@gmail.com',
+      phone: '8260805119',
       password: 'Admin@123',
       role: 'admin',
       userType: 'admin',
@@ -28,8 +28,8 @@ const createAdminProfile = async () => {
 
     await admin.save();
     console.log('✅ Admin created successfully');
-    console.log('📧 Email: admin@sitelink.co');
-    console.log('📱 Phone: 9999999980');
+    console.log('📧 Email: www.smartnex@gmail.com');
+    console.log('📱 Phone: 8260805119');
     console.log('🔑 Password: Admin@123');
     process.exit();
 
