@@ -43,6 +43,43 @@ function buildDocumentReviews(user, rejectedByPath = {}) {
   }));
 }
 
+// ── Vendor documents: PAN card + GST certificate, har ek ka alag review ──
+const VENDOR_DOCS = [
+  { field: 'panCardImage', label: 'PAN Card' },
+  { field: 'gstCertificate', label: 'GST Certificate' },
+];
+
+/// Vendor ke abhi lage documents ka review. [rejected] = { docType: reason }.
+/// Jo isme nahi wo approved.
+function buildVendorReviews(vendor, rejected = {}) {
+  const now = new Date();
+  return VENDOR_DOCS.filter((d) => vendor[d.field]).map((d) => ({
+    path: vendor[d.field],
+    docType: d.field,
+    status: rejected[d.field] !== undefined ? 'rejected' : 'approved',
+    reason: rejected[d.field] || null,
+    reviewedAt: now,
+  }));
+}
+
+/// Admin ko dikhane ke liye vendor documents + review. Review sirf usi file
+/// ka maana jaata hai jo abhi lagi hai — vendor ne nayi file daali to
+/// "pending" (dobara dekhni hai).
+function vendorDocumentsWithReview(vendor) {
+  const reviews = vendor.documentReviews || [];
+  return VENDOR_DOCS.filter((d) => vendor[d.field]).map((d) => {
+    const r = reviews.find((x) => x.docType === d.field && x.path === vendor[d.field]);
+    const legacy = !r && vendor.verificationStatus === 'verified';
+    return {
+      docType: d.field,
+      name: d.label,
+      url: vendor[d.field],
+      reviewStatus: r ? r.status : legacy ? 'approved' : 'pending',
+      rejectionReason: r?.reason || null,
+    };
+  });
+}
+
 /// Admin ko dikhane ke liye documents + unka review status.
 function documentsWithReview(user) {
   const idReviews = (user.documentReviews || []).filter((r) => r.docType === 'governmentID');
@@ -563,7 +600,7 @@ exports.getVendorDetails = async (req, res) => {
     }
 
     const vendor = await User.findById(id).select(
-      'companyName name phone email city gstNumber companyLogo verificationStatus verificationStatus userType adminRating adminRatingComment ratedAt whatsappNumber website role workArea workState profileImage subscription subscriptionId panNumber gstCertificate panCardImage isBlocked'
+      'companyName name phone email city gstNumber companyLogo verificationStatus verificationRejectedReason documentReviews userType adminRating adminRatingComment ratedAt whatsappNumber website role workArea workState profileImage subscription subscriptionId panNumber gstCertificate panCardImage isBlocked'
     );
 
     if (!vendor || vendor.userType !== 'vendor') {
@@ -599,7 +636,9 @@ exports.getVendorDetails = async (req, res) => {
       data: {
         ...vendor.toObject(),
         subscriptionDetails,
-        requiredDocuments
+        requiredDocuments,
+        // PAN / GST — har document ka review status (reject modal + badges)
+        vendorDocuments: vendorDocumentsWithReview(vendor)
       }
     });
   } catch (error) {
@@ -628,6 +667,8 @@ exports.verifyVendor = async (req, res) => {
     vendor.isVerified = true;
     vendor.verificationRejectedReason = null;
     vendor.verificationReviewedAt = new Date();
+    // Dono documents (PAN, GST) approved.
+    vendor.documentReviews = buildVendorReviews(vendor);
 
     await vendor.save({ validateModifiedOnly: true });
 
@@ -657,15 +698,27 @@ exports.verifyVendor = async (req, res) => {
 exports.rejectVendor = async (req, res) => {
   try {
     const { id } = req.params;
-    const { reason } = req.body;
+    // reason    — general reason (optional agar documents diye)
+    // documents — [{ docType: 'panCardImage' | 'gstCertificate', reason }]
+    //             jo document galat hai sirf wahi; vendor sirf wahi
+    //             dobara upload karta hai.
+    const { reason, documents } = req.body;
 
     // Validate ObjectId format
     if (!id || !id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ success: false, message: 'Invalid vendor ID format' });
     }
 
-    if (!reason || typeof reason !== 'string' || !reason.trim()) {
-      return res.status(400).json({ success: false, message: 'Rejection reason is required' });
+    const general = typeof reason === 'string' ? reason.trim() : '';
+    const docList = Array.isArray(documents) ? documents : [];
+    const rejected = {};
+    for (const d of docList) {
+      if (!d || !VENDOR_DOCS.some((v) => v.field === d.docType)) continue;
+      rejected[d.docType] = (typeof d.reason === 'string' && d.reason.trim()) || general || 'Not acceptable';
+    }
+
+    if (!general && Object.keys(rejected).length === 0) {
+      return res.status(400).json({ success: false, message: 'Select a document or give a rejection reason' });
     }
 
     const vendor = await User.findById(id);
@@ -674,10 +727,23 @@ exports.rejectVendor = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Vendor not found' });
     }
 
+    // Summary reason (app ke banner + notification ke liye).
+    const docSummary = VENDOR_DOCS.filter((d) => rejected[d.field] !== undefined)
+      .map((d) => `${d.label}: ${rejected[d.field]}`);
     vendor.verificationStatus = 'rejected';
     vendor.isVerified = false;
-    vendor.verificationRejectedReason = reason.trim();
+    // e.g. "PAN Card: blurry photo; GST Certificate: wrong number"
+    const generalUsed = Object.values(rejected).includes(general);
+    vendor.verificationRejectedReason = docSummary.length
+      ? [general && !generalUsed ? general : '', ...docSummary].filter(Boolean).join('; ')
+      : general;
     vendor.verificationReviewedAt = new Date();
+    // Koi document chuna hi nahi (sirf general reason) → saare documents
+    // dobara maangte hain; warna sirf chune hue rejected, baaki approved.
+    vendor.documentReviews = Object.keys(rejected).length
+      ? buildVendorReviews(vendor, rejected)
+      : buildVendorReviews(vendor, Object.fromEntries(
+        VENDOR_DOCS.filter((d) => vendor[d.field]).map((d) => [d.field, general])));
 
     await vendor.save({ validateModifiedOnly: true });
 
