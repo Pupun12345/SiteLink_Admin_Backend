@@ -4,6 +4,22 @@ const Notification = require('../models/Notification');
 const PlanDetails = require('../models/PlanDetails');
 const Subscription = require('../models/Subscription')
 
+// Kitne users ka plan ABHI chalu hai — user ki apni expiry se (wahi app
+// backend bhi maanta hai). Pehle Subscription records gine jaate the:
+// record delete ho jaaye to chalu plan wala user ginti se gayab, aur
+// expire hua record "active" pada rahe to ginti me jud jaata.
+async function liveSubscriberCounts() {
+  const rows = await User.aggregate([
+    { $match: { userType: { $in: ['worker', 'vendor', 'customer'] }, subscriptionExpiresAt: { $gt: new Date() } } },
+    { $group: { _id: '$userType', n: { $sum: 1 } } },
+  ]);
+  const by = Object.fromEntries(rows.map((r) => [r._id, r.n]));
+  const worker = by.worker || 0;
+  const vendor = by.vendor || 0;
+  const customer = by.customer || 0;
+  return { worker, vendor, customer, total: worker + vendor + customer };
+}
+
 exports.totalWorkers = async (req, res) => {
     try {
         let workersCount = await User.countDocuments({ userType: 'worker' });
@@ -58,10 +74,10 @@ exports.overview = async (req, res) => {
         const totalUsers = await User.countDocuments();
 
         // Subscription statistics from the subscription collection
-        const activeSubscriptionDocs = await Subscription.find({ status: 'active' }).populate('user', 'userType');
-        const activeSubscriptions = activeSubscriptionDocs.length;
-        const vendorSubscriptions = activeSubscriptionDocs.filter(sub => sub.user?.userType === 'vendor').length;
-        const workerSubscriptions = activeSubscriptionDocs.filter(sub => sub.user?.userType === 'worker').length;
+        const live = await liveSubscriberCounts();
+        const activeSubscriptions = live.total;
+        const vendorSubscriptions = live.vendor;
+        const workerSubscriptions = live.worker;
 
         // Job statistics
         const totalJobs = await Job.countDocuments();
@@ -95,6 +111,7 @@ exports.overview = async (req, res) => {
         const jobGrowth = totalJobs > 0 ? ((recentJobs / totalJobs) * 100).toFixed(1) : 0;
 
         // Revenue calculation from active subscriptions
+        const activeSubscriptionDocs = await Subscription.find({ status: 'active' }).select('amount');
         const subscriptionRevenue = activeSubscriptionDocs.reduce((sum, sub) => sum + (sub.amount || 0), 0);
         const jobRevenue = totalJobs * 150; // Estimated job posting revenue
         const totalRevenue = subscriptionRevenue + jobRevenue;
@@ -366,10 +383,11 @@ exports.revenueStats = async (req, res) => {
         // Calculate total revenue from actual subscription amounts
         const totalRevenue = subscriptions.reduce((sum, sub) => sum + (sub.amount || 0), 0);
 
-        // Count subscriptions by user type
-        const workerSubscriptions = subscriptions.filter(sub => sub.user?.userType === 'worker').length;
-        const vendorSubscriptions = subscriptions.filter(sub => sub.user?.userType === 'vendor').length;
-        const customerSubscriptions = subscriptions.filter(sub => sub.user?.userType === 'customer').length;
+        // Count subscribers by user type — chalu plan wale users se.
+        const live = await liveSubscriberCounts();
+        const workerSubscriptions = live.worker;
+        const vendorSubscriptions = live.vendor;
+        const customerSubscriptions = live.customer;
 
         // Calculate revenue by plan
         const revenueByPlan = subscriptions.reduce((acc, sub) => {
@@ -400,8 +418,8 @@ exports.revenueStats = async (req, res) => {
             success: true,
             data: {
                 totalRevenue,
-                totalSubscriptions: subscriptions.length,
-                activeSubscriptions: subscriptions.length,
+                totalSubscriptions: live.total,
+                activeSubscriptions: live.total,
                 workerSubscriptions,
                 vendorSubscriptions,
                 customerSubscriptions,
