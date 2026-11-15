@@ -63,6 +63,17 @@ const jobSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     },
+    // Admin kisi vendor ke liye job daale to worker ko USI vendor ka
+    // naam / company / WhatsApp dikhe, admin ka nahi. postedBy admin rehta
+    // hai; ye contact fields job ke saath save hote hain.
+    postedFor: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    contactName: { type: String, trim: true, default: null },
+    contactWhatsapp: { type: String, trim: true, default: null },
+    companyLogo: { type: String, default: null },
     likes: {
       type: [
         {

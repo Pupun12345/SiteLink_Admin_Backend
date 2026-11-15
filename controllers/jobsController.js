@@ -236,7 +236,7 @@ exports.getJobById = async (req, res) => {
 // @access  Private
 exports.createJob = async (req, res) => {
   try {
-    const { title, company, location, latitude, longitude, quantity, salary, salaryType, isUrgent, duration, description, experience, amenities, companyLogoUrl } = req.body;
+    const { title, company, location, latitude, longitude, quantity, salary, salaryType, isUrgent, duration, description, experience, amenities, companyLogoUrl, postedFor, contactName, contactWhatsapp } = req.body;
 
     const user = await User.findById(req.user.id);
     // Allow admin users (from AdminUser collection) to create jobs directly
@@ -345,12 +345,38 @@ exports.createJob = async (req, res) => {
       });
     }
 
+    // ── Job kis vendor ke liye (admin) — worker ko wahi contact dikhe ──
+    // Vendor chuna ho to uski company / naam / WhatsApp default; admin ne
+    // form me kuch badla ho to wo upar. WhatsApp 10-digit Indian number.
+    let vendor = null;
+    if (postedFor && mongoose.Types.ObjectId.isValid(postedFor)) {
+      vendor = await User.findOne({ _id: postedFor, userType: 'vendor' })
+        .select('name companyName whatsappNumber phone companyLogo');
+      if (!vendor) {
+        return res.status(400).json({ success: false, message: 'Selected vendor not found' });
+      }
+    }
+    const waDigits = String(contactWhatsapp || '').replace(/\D/g, '').slice(-10);
+    const whatsapp = waDigits || (vendor ? String(vendor.whatsappNumber || vendor.phone || '').replace(/\D/g, '').slice(-10) : '');
+    if (whatsapp && !/^[6-9]\d{9}$/.test(whatsapp)) {
+      return res.status(400).json({ success: false, message: 'Enter a valid 10-digit WhatsApp number' });
+    }
+    // Naksha / lat-lng — 0,0 ya galat value save nahi (app "Get Directions"
+    // samundar me le jaata tha).
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    const hasPin = Number.isFinite(lat) && Number.isFinite(lng)
+      && !(lat === 0 && lng === 0) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+
     const job = await Job.create({
       title: title.trim(),
-      company: company.trim(),
+      company: (company && company.trim()) || vendor?.companyName || 'Sitelink',
       location: location.trim(),
-      latitude: latitude ? latitude.trim() : undefined,
-      longitude: longitude ? longitude.trim() : undefined,
+      latitude: hasPin ? String(lat) : undefined,
+      longitude: hasPin ? String(lng) : undefined,
+      postedFor: vendor ? vendor._id : null,
+      contactName: (contactName && String(contactName).trim()) || vendor?.name || null,
+      contactWhatsapp: whatsapp || null,
       quantity: workersNeeded.toString(),
       salary: parsedSalary,
       salaryType: salaryType,
@@ -359,7 +385,7 @@ exports.createJob = async (req, res) => {
       description: description.trim(),
       experience: exp.toString(),
       amenities: amenityObjectIds,
-      companyLogo: companyLogoUrl || undefined,
+      companyLogo: companyLogoUrl || vendor?.companyLogo || undefined,
       postedBy: req.user.id,
       isActive: true,
       // Jobs are auto-approved now (no admin review workflow) — admin-created
