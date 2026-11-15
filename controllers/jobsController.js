@@ -236,7 +236,7 @@ exports.getJobById = async (req, res) => {
 // @access  Private
 exports.createJob = async (req, res) => {
   try {
-    const { title, company, location, latitude, longitude, quantity, salary, salaryType, isUrgent, duration, description, experience, amenities, companyLogoUrl, postedFor, contactName, contactWhatsapp } = req.body;
+    const { title, company, location, latitude, longitude, quantity, salary, salaryType, isUrgent, duration, description, experience, amenities, companyLogoUrl, postedFor, contactName, contactWhatsapp, startDate } = req.body;
 
     const user = await User.findById(req.user.id);
     // Allow admin users (from AdminUser collection) to create jobs directly
@@ -377,6 +377,7 @@ exports.createJob = async (req, res) => {
       postedFor: vendor ? vendor._id : null,
       contactName: (contactName && String(contactName).trim()) || vendor?.name || null,
       contactWhatsapp: whatsapp || null,
+      startDate: startDate && !Number.isNaN(new Date(startDate).getTime()) ? new Date(startDate) : null,
       quantity: workersNeeded.toString(),
       salary: parsedSalary,
       salaryType: salaryType,

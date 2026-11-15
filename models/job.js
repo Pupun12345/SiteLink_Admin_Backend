@@ -73,6 +73,8 @@ const jobSchema = new mongoose.Schema(
     },
     contactName: { type: String, trim: true, default: null },
     contactWhatsapp: { type: String, trim: true, default: null },
+    // Kaam kab shuru hoga (app ki job detail me 'Starts: …').
+    startDate: { type: Date, default: null },
     companyLogo: { type: String, default: null },
     likes: {
       type: [
