@@ -5,6 +5,36 @@ const Subscription = require('../models/Subscription');
 const mongoose = require("mongoose");
 const Amenity = require('../models/amenities');
 const notifyMatchingWorkers = require('../utils/notifyMatchingWorkers');
+const notifyUser = require('../utils/notifyUser');
+
+// Admin ne application approve / reject ki — worker ko uski bhasha me
+// saaf message. Admin ka likha reason (notes) ho to wo bhi; panel ka
+// default "Status updated to …" text nahi bhejte.
+function applicationStatusMessage(jobTitle, status, notes, lang) {
+  const job = (jobTitle || '').trim() || (lang === 'hindi' ? 'जॉब' : 'the job');
+  const note = typeof notes === 'string' && notes.trim()
+    && !/^Status updated to /i.test(notes.trim())
+    && !/^Congratulations! Your application has been approved/i.test(notes.trim())
+    ? notes.trim().slice(0, 200)
+    : '';
+  const hi = lang === 'hindi';
+  if (['approved', 'hired', 'confirmed', 'shortlisted'].includes(status)) {
+    return hi
+      ? { title: '🎉 बधाई हो! आपका आवेदन मंज़ूर हुआ', body: note || `"${job}" के लिए आपका आवेदन मंज़ूर हो गया है। हमारी टीम जल्द आपसे संपर्क करेगी।` }
+      : { title: '🎉 Congratulations! Application approved', body: note || `Your application for "${job}" has been approved. Our team will contact you shortly.` };
+  }
+  if (status === 'rejected') {
+    const base = hi
+      ? `"${job}" के लिए इस बार आपका आवेदन चुना नहीं गया।`
+      : `Your application for "${job}" was not selected this time.`;
+    const tail = hi ? ' दूसरी जॉब्स के लिए आवेदन करते रहें।' : ' Keep applying for other jobs.';
+    return {
+      title: hi ? 'आवेदन अपडेट' : 'Application update',
+      body: note ? `${base} ${hi ? 'कारण' : 'Reason'}: ${note}` : base + tail,
+    };
+  }
+  return null;
+}
 
 // @desc    Get all jobs
 // @route   GET /api/jobs
@@ -475,12 +505,17 @@ exports.updateApplicationStatus = async (req, res) => {
       });
     }
 
-    if (job.postedBy.toString() !== userId) {
+    // Job ka maalik, ya admin (admin panel se kisi bhi vendor ki job ke
+    // applicants approve / reject ho sakein).
+    const isAdmin = req.user.userType === 'admin' || req.user.role === 'admin';
+    if (job.postedBy.toString() !== userId && !isAdmin) {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to update this application',
       });
     }
+
+    const before = await Application.findOne({ _id: applicationId, job: jobId }).select('status');
 
     const application = await Application.findOneAndUpdate(
       { _id: applicationId, job: jobId },
@@ -491,7 +526,7 @@ exports.updateApplicationStatus = async (req, res) => {
         reviewedAt: new Date(),
       },
       { new: true }
-    ).populate('applicant', 'name profileImage userType');
+    ).populate('applicant', 'name profileImage userType language');
 
     if (!application) {
       return res.status(404).json({
@@ -502,6 +537,20 @@ exports.updateApplicationStatus = async (req, res) => {
 
     // Check and update job status after application status change
     await checkAndUpdateJobStatus(jobId);
+
+    // Worker ko batao — sirf jab status sach me badla ho (dobara click par
+    // dobara notification nahi). Fire-and-forget: response nahi rukta.
+    if (before && before.status !== status && application.applicant) {
+      const msg = applicationStatusMessage(job.title, status, notes, application.applicant.language);
+      if (msg) {
+        notifyUser(application.applicant._id, {
+          type: 'application_status',
+          title: msg.title,
+          body: msg.body,
+          data: { jobId: String(job._id), applicationId: String(application._id), status: String(status) },
+        }).catch((e) => console.error('[updateApplicationStatus] notifyUser failed:', e.message));
+      }
+    }
 
     res.status(200).json({
       success: true,
