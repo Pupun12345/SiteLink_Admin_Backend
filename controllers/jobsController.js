@@ -420,6 +420,18 @@ exports.updateJob = async (req, res) => {
   try {
     const updateData = { ...req.body };
 
+    // Experience saal ki ginti: "0" = Fresher chalega, warna 1–60.
+    if (updateData.experience !== undefined) {
+      const exp = Number(String(updateData.experience).trim());
+      if (String(updateData.experience).trim() === '' || Number.isNaN(exp) || exp < 0 || exp > 60) {
+        return res.status(400).json({
+          success: false,
+          message: 'Experience must be 0 (Fresher) or between 1 and 60 years',
+        });
+      }
+      updateData.experience = String(exp);
+    }
+
     if (updateData.amenities) {
       const validAmenities = await Amenity.countDocuments({
         _id: { $in: updateData.amenities },
