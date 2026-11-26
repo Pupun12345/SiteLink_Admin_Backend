@@ -19,7 +19,7 @@ function currentWorkerDocs(user) {
     ...certs.map((path, i) => ({
       path,
       docType: 'experienceCertificate',
-      label: certs.length > 1 ? `Experience Certificate ${i + 1}` : 'Experience Certificate',
+      label: certs.length > 1 ? `Experience Certificate / Resume ${i + 1}` : 'Experience Certificate / Resume',
     })),
   ];
 }
